@@ -70,7 +70,7 @@ export default function Home() {
   )
   const [showAddAccount, setShowAddAccount] = useState(false)
   const [showBulkImport, setShowBulkImport] = useState(false)
-  const [showAccountSelector, setShowAccountSelector] = useState(false)
+  const [showAccountSelector, setShowAccountSelector] = useState(false) // Keeping state, might use differently
 
   // Email state
   const [folders, setFolders] = useState<Folder[]>([])
@@ -613,16 +613,24 @@ export default function Home() {
       const date = new Date(dateStr)
       const now = new Date()
       const isToday = date.toDateString() === now.toDateString()
+      const isThisYear = date.getFullYear() === now.getFullYear()
 
       if (isToday) {
         return date.toLocaleTimeString('zh-CN', {
           hour: '2-digit',
           minute: '2-digit',
+          hour12: false,
+        })
+      } else if (isThisYear) {
+        return date.toLocaleDateString('zh-CN', {
+          month: 'short',
+          day: 'numeric',
         })
       }
       return date.toLocaleDateString('zh-CN', {
-        month: 'short',
-        day: 'numeric',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
       })
     } catch {
       return dateStr
@@ -646,15 +654,114 @@ export default function Home() {
   }
 
   return (
-    <div className="h-screen overflow-hidden flex flex-col bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      {/* Header */}
-      <header className="bg-black/30 backdrop-blur-xl border-b border-white/10 sticky top-0 z-50">
-        <div className="max-w-full mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center shadow-lg shadow-violet-500/30">
+    <div className="flex h-screen overflow-hidden bg-[var(--background)] font-sans text-[var(--foreground)]">
+      {/* Sidebar */}
+      <aside className="w-[var(--sidebar-width)] flex-shrink-0 flex flex-col bg-[var(--background)]">
+        {/* Logo Area */}
+        <div className="h-16 flex items-center px-6 gap-3">
+          <div className="w-8 h-8 flex items-center justify-center">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="#EA4335"
+              className="w-7 h-7"
+            >
+              <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z" />
+            </svg>
+          </div>
+          <span className="text-xl text-[var(--foreground)] opacity-90 tracking-tight">
+            Gmail
+          </span>
+        </div>
+
+        {/* Compose Button */}
+        <div className="px-4 py-2">
+          <button className="gmail-compose-btn">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+              />
+            </svg>
+            <span>Compose</span>
+          </button>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 overflow-y-auto mt-2">
+          {loading === 'folders' && folders.length === 0 ? (
+            <div className="px-6 py-4 text-xs text-white/50">
+              Loading folders...
+            </div>
+          ) : folders.length > 0 ? (
+            folders.map(folder => (
+              <div
+                key={folder.path}
+                onClick={() => {
+                  setSelectedFolder(folder.path)
+                  setSelectedEmail(null) // Return to list view
+                }}
+                className={`gmail-nav-item ${
+                  selectedFolder === folder.path ? 'active' : ''
+                }`}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5 opacity-70"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  {folder.path.toLowerCase().includes('inbox') ? (
+                    <path d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm14 1H4v4.385l5.223 3.656a1 1 0 001.154 0L16 10.385V6zM4 13v2h12v-2l-4.83-3.38L4 13z" />
+                  ) : folder.path.toLowerCase().includes('sent') ? (
+                    <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+                  ) : folder.path.toLowerCase().includes('trash') ||
+                    folder.path.toLowerCase().includes('delete') ? (
+                    <path
+                      fillRule="evenodd"
+                      d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
+                      clipRule="evenodd"
+                    />
+                  ) : (
+                    <path
+                      fillRule="evenodd"
+                      d="M2 6a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1H8a3 3 0 00-3 3v1.5a1.5 1.5 0 01-3 0V6z"
+                      clipRule="evenodd"
+                    />
+                  )}
+                </svg>
+                <span className="flex-1 truncate">{folder.name}</span>
+                {folder.messageCount > 0 && (
+                  <span className="text-xs font-semibold">
+                    {folder.messageCount}
+                  </span>
+                )}
+              </div>
+            ))
+          ) : (
+            <div className="px-6 py-2 text-sm text-white/50">No folders</div>
+          )}
+        </nav>
+      </aside>
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Header */}
+        <header className="h-[var(--header-height)] flex items-center justify-between px-4 gap-4 flex-shrink-0">
+          {/* Search Bar */}
+          <div className="gmail-search-bar">
+            <button onClick={() => searchEmailsFunc(searchQuery, 0, true)}>
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6 text-white"
+                className="h-5 w-5 text-gray-400"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -663,187 +770,42 @@ export default function Home() {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
                 />
               </svg>
-            </div>
-            <h1 className="text-xl font-bold bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">
-              IMAP Mail Manager
-            </h1>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {/* Custom Account Selector */}
-            <div className="relative">
+            </button>
+            <input
+              type="text"
+              className="flex-1 bg-transparent border-none outline-none text-white placeholder-gray-400"
+              placeholder="Search mail"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              onKeyDown={e =>
+                e.key === 'Enter' && searchEmailsFunc(searchQuery, 0, true)
+              }
+            />
+            {searchQuery && (
               <button
-                onClick={() => setShowAccountSelector(!showAccountSelector)}
-                className="flex items-center gap-3 px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-white text-sm transition-all min-w-[0px]"
+                onClick={() => {
+                  setSearchQuery('')
+                  fetchEmails(0, true)
+                }}
               >
-                {selectedAccount ? (
-                  <>
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center text-xs font-bold">
-                      {selectedAccount.email.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="flex-1 text-left">
-                      <div className="font-medium truncate max-w-[150px]">
-                        {selectedAccount.name}
-                      </div>
-                      <div className="text-xs text-white/50 truncate max-w-[150px]">
-                        {selectedAccount.email}
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <span className="text-white/50">选择账户...</span>
-                )}
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  className={`h-4 w-4 text-white/50 transition-transform ${
-                    showAccountSelector ? 'rotate-180' : ''
-                  }`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
+                  className="h-5 w-5 text-gray-400"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
                 >
                   <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 9l-7 7-7-7"
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                    clipRule="evenodd"
                   />
                 </svg>
               </button>
-
-              {showAccountSelector && (
-                <div className="absolute right-0 top-full mt-2 w-80 bg-slate-800/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50">
-                  <div className="p-3 border-b border-white/10 flex items-center justify-between">
-                    <span className="text-sm font-medium text-white/70">
-                      账户列表 ({accounts.length})
-                    </span>
-                    <button
-                      onClick={() => {
-                        setShowAccountSelector(false)
-                        setShowServerManager(true)
-                      }}
-                      className="text-xs text-violet-400 hover:text-violet-300"
-                    >
-                      管理服务器
-                    </button>
-                  </div>
-                  <div className="max-h-64 overflow-y-auto">
-                    {accounts.length === 0 ? (
-                      <div className="p-4 text-center text-white/50 text-sm">
-                        暂无账户
-                      </div>
-                    ) : (
-                      accounts.map(acc => (
-                        <div
-                          key={acc.id}
-                          className={`flex items-center gap-3 px-4 py-3 hover:bg-white/5 cursor-pointer transition-colors ${
-                            selectedAccount?.id === acc.id
-                              ? 'bg-violet-600/20'
-                              : ''
-                          }`}
-                          onClick={() => {
-                            setSelectedAccount(acc)
-                            setShowAccountSelector(false)
-                          }}
-                        >
-                          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500/50 to-fuchsia-500/50 flex items-center justify-center text-xs font-bold text-white">
-                            {acc.email.charAt(0).toUpperCase()}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-white text-sm truncate">
-                              {acc.name}
-                            </div>
-                            <div className="text-xs text-white/50 truncate">
-                              {acc.email}
-                            </div>
-                          </div>
-                          <button
-                            onClick={e => {
-                              e.stopPropagation()
-                              navigator.clipboard.writeText(acc.email)
-                              setToast({
-                                message: '邮箱地址已复制',
-                                isVisible: true,
-                                type: 'success',
-                              })
-                            }}
-                            className="p-1.5 text-white/30 hover:text-violet-400 hover:bg-violet-500/20 rounded-lg transition-colors"
-                            title="复制邮箱地址"
-                          >
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              className="h-4 w-4"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                              />
-                            </svg>
-                          </button>
-                          <button
-                            onClick={e => {
-                              e.stopPropagation()
-                              removeAccount(acc.id)
-                            }}
-                            className="p-1.5 text-white/30 hover:text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
-                          >
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              className="h-4 w-4"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                              />
-                            </svg>
-                          </button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                  <div className="p-2 border-t border-white/10 grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => {
-                        setShowAccountSelector(false)
-                        setShowAddAccount(true)
-                      }}
-                      className="px-3 py-2 bg-white/5 hover:bg-white/10 text-white text-sm rounded-lg transition-colors"
-                    >
-                      + 添加账户
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowAccountSelector(false)
-                        setShowBulkImport(true)
-                      }}
-                      className="px-3 py-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white text-sm rounded-lg transition-colors"
-                    >
-                      批量导入
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Logout Button */}
-            <button
-              onClick={handleLogout}
-              className="p-2.5 bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 rounded-xl text-white/70 hover:text-red-400 transition-all"
-              title="退出登录"
-            >
+            )}
+            <button className="text-gray-400 hover:bg-gray-700/50 p-2 rounded-full">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 className="h-5 w-5"
@@ -855,92 +817,155 @@ export default function Home() {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                  d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
                 />
               </svg>
             </button>
           </div>
-        </div>
-      </header>
 
-      {/* Error Banner */}
-      {error && (
-        <div className="bg-red-500/20 border-b border-red-500/50 px-4 py-3 text-red-200 flex items-center justify-between">
-          <span>{error}</span>
-          <button
-            onClick={() => setError('')}
-            className="text-red-200 hover:text-white"
-          >
-            ✕
-          </button>
-        </div>
-      )}
-
-      {/* Main Content */}
-      <div className="flex flex-1 min-h-0">
-        {/* Sidebar - Folders */}
-        <aside className="w-64 bg-black/20 backdrop-blur-xl border-r border-white/10 flex flex-col overflow-hidden">
-          <div className="p-4 border-b border-white/10">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-white/70 uppercase tracking-wider">
-                文件夹
-              </h2>
-              <button
-                onClick={fetchFolders}
-                disabled={loading === 'folders' || !selectedAccount}
-                className="text-white/50 hover:text-white transition-colors disabled:opacity-30"
+          {/* Right Profile / Settings */}
+          <div className="flex items-center gap-3">
+            <button
+              className="p-2 text-gray-400 hover:bg-white/10 rounded-full"
+              onClick={() => setShowServerManager(true)}
+              title="Settings"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className={`h-4 w-4 ${
-                    loading === 'folders' ? 'animate-spin' : ''
-                  }`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                  />
-                </svg>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                />
+              </svg>
+            </button>
+
+            <div className="relative">
+              <button
+                onClick={() => setShowAccountSelector(!showAccountSelector)}
+                className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center text-sm font-bold text-white ring-2 ring-transparent hover:ring-white/20"
+              >
+                {selectedAccount?.email.charAt(0).toUpperCase() || '?'}
               </button>
+              {/* Account Dropdown */}
+              {showAccountSelector && (
+                <div className="absolute right-0 top-full mt-2 w-72 bg-[#2d2e30] rounded-xl shadow-xl border border-white/10 z-50 overflow-hidden">
+                  <div className="p-4 border-b border-white/10 text-center">
+                    <div className="w-16 h-16 rounded-full bg-purple-500 mx-auto flex items-center justify-center text-2xl font-bold mb-2">
+                      {selectedAccount?.email.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="font-medium text-white">
+                      {selectedAccount?.name}
+                    </div>
+                    <div className="text-sm text-gray-400">
+                      {selectedAccount?.email}
+                    </div>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto">
+                    {accounts.map(acc => (
+                      <div
+                        key={acc.id}
+                        onClick={() => {
+                          setSelectedAccount(acc)
+                          setShowAccountSelector(false)
+                        }}
+                        className="px-4 py-3 hover:bg-white/5 cursor-pointer flex items-center gap-3"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-xs">
+                          {acc.email.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm text-white truncate">
+                            {acc.name}
+                          </div>
+                          <div className="text-xs text-gray-400 truncate">
+                            {acc.email}
+                          </div>
+                        </div>
+                        <button
+                          onClick={e => {
+                            e.stopPropagation()
+                            removeAccount(acc.id)
+                          }}
+                          className="p-1 text-gray-400 hover:text-red-400 rounded"
+                          title="Remove account"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="h-4 w-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M6 18L18 6M6 6l12 12"
+                            />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="p-2 border-t border-white/10 flex flex-col gap-1">
+                    <button
+                      onClick={() => {
+                        setShowAccountSelector(false)
+                        setShowAddAccount(true)
+                      }}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-white/5 rounded"
+                    >
+                      Add another account
+                    </button>
+                    <button
+                      onClick={handleLogout}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-white/5 rounded"
+                    >
+                      Sign out
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
+        </header>
 
-          <nav className="flex-1 overflow-y-auto p-2">
-            {!selectedAccount ? (
-              <div className="text-center py-8">
-                <p className="text-white/50 text-sm mb-4">请先添加邮箱账户</p>
+        {/* Content Surface */}
+        <div className="flex-1 rounded-tl-2xl bg-[var(--surface)] mr-2 mb-2 overflow-hidden flex flex-col relative">
+          {/* Error Banner */}
+          {error && (
+            <div className="bg-red-900/50 text-red-200 px-4 py-2 text-sm flex justify-between absolute w-full z-10 top-0">
+              <span>{error}</span>
+              <button onClick={() => setError('')}>✕</button>
+            </div>
+          )}
+
+          {/* View: Email Detail */}
+          {selectedEmail ? (
+            <div className="flex-1 flex flex-col h-full bg-[var(--surface)]">
+              {/* Toolbar */}
+              <div className="h-12 border-b border-[var(--border)] flex items-center px-4 gap-4">
                 <button
-                  onClick={() => setShowAddAccount(true)}
-                  className="px-4 py-2 bg-violet-600/50 hover:bg-violet-600 text-white text-sm rounded-lg transition-colors"
-                >
-                  添加账户
-                </button>
-              </div>
-            ) : loading === 'folders' ? (
-              <div className="flex justify-center py-8">
-                <div className="w-6 h-6 border-2 border-violet-500 border-t-transparent rounded-full animate-spin"></div>
-              </div>
-            ) : folders.length === 0 ? (
-              <p className="text-white/50 text-sm text-center py-8">无文件夹</p>
-            ) : (
-              folders.map(folder => (
-                <button
-                  key={folder.path}
-                  onClick={() => setSelectedFolder(folder.path)}
-                  className={`w-full text-left px-4 py-3 rounded-lg mb-1 transition-all flex items-center gap-3 ${
-                    selectedFolder === folder.path
-                      ? 'bg-gradient-to-r from-violet-600/50 to-fuchsia-600/50 text-white shadow-lg'
-                      : 'text-white/70 hover:bg-white/10 hover:text-white'
-                  }`}
+                  onClick={() => setSelectedEmail(null)}
+                  className="p-2 hover:bg-white/10 rounded-full text-gray-400"
+                  title="Back"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5 flex-shrink-0"
+                    className="h-5 w-5"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -949,49 +974,143 @@ export default function Home() {
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth={2}
-                      d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                      d="M10 19l-7-7m0 0l7-7m-7 7h18"
                     />
                   </svg>
-                  <span className="truncate">{folder.name}</span>
                 </button>
-              ))
-            )}
-          </nav>
-
-          {/* Quick Stats */}
-          {accounts.length > 0 && (
-            <div className="p-3 border-t border-white/10 bg-white/5">
-              <div className="text-xs text-white/50 text-center">
-                {accounts.length} 个账户 · {servers.length} 个服务器
-              </div>
-            </div>
-          )}
-        </aside>
-
-        {/* Email List */}
-        <div className="w-96 bg-black/10 border-r border-white/10 flex flex-col">
-          <div className="p-4 border-b border-white/10">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-white/70 uppercase tracking-wider">
-                {selectedFolder || '收件箱'}
-              </h2>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-white/40">
-                  {emails.length}
-                  {totalEmails > 0 ? `/${totalEmails}` : ''}
-                </span>
+                <div className="h-5 w-px bg-gray-600 mx-2"></div>
                 <button
-                  onClick={() => {
-                    setSearchQuery('')
-                    setEmailOffset(0)
-                    fetchEmails(0, true)
-                  }}
-                  disabled={loading === 'emails' || !selectedAccount}
-                  className="text-white/50 hover:text-white transition-colors disabled:opacity-30"
+                  onClick={() => deleteEmailHandler(selectedEmail.uid)}
+                  className="p-2 hover:bg-white/10 rounded-full text-gray-400"
+                  title="Delete"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
-                    className={`h-4 w-4 ${
+                    className="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                    />
+                  </svg>
+                </button>
+                <button
+                  className="p-2 hover:bg-white/10 rounded-full text-gray-400"
+                  title="Mark unread"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                    />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto p-8">
+                <div className="max-w-4xl mx-auto">
+                  <h1 className="text-2xl font-normal text-white mb-6">
+                    {selectedEmail.subject}
+                  </h1>
+                  <div className="flex items-start justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-gray-600 flex items-center justify-center text-lg font-bold">
+                        {selectedEmail.from.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="font-bold text-white text-sm">
+                          {selectedEmail.from.replace(/<.*>/, '').trim()}
+                          <span className="font-normal text-gray-400 ml-2 text-xs">
+                            &lt;
+                            {selectedEmail.from
+                              .match(/<.*>/)?.[0]
+                              ?.replace(/[<>]/g, '') || selectedEmail.from}
+                            &gt;
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          to {selectedEmail.to}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-400">
+                      {new Date(selectedEmail.date).toLocaleString()}
+                    </div>
+                  </div>
+
+                  {/* Body */}
+                  <div className="bg-white text-black p-6 rounded shadow-sm min-h-[200px]">
+                    {selectedEmail.html ? (
+                      <div
+                        dangerouslySetInnerHTML={{ __html: selectedEmail.html }}
+                        className="prose max-w-none"
+                      />
+                    ) : (
+                      <div className="whitespace-pre-wrap font-mono text-sm">
+                        {selectedEmail.text || 'No content.'}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Attachments */}
+                  {selectedEmail.attachments &&
+                    selectedEmail.attachments.length > 0 && (
+                      <div className="mt-8 border-t border-white/10 pt-4">
+                        <h4 className="text-sm font-bold text-gray-400 mb-3">
+                          {selectedEmail.attachments.length} Attachments
+                        </h4>
+                        <div className="flex flex-wrap gap-4">
+                          {selectedEmail.attachments.map((att, i) => (
+                            <div
+                              key={i}
+                              className="flex items-center gap-3 p-3 bg-[#444746] rounded-lg border border-white/10 w-48 hover:bg-[#535658] cursor-pointer"
+                            >
+                              <div className="w-8 h-8 bg-red-500 rounded flex items-center justify-center text-xs font-bold text-white">
+                                FILE
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div
+                                  className="text-sm font-medium text-white truncate"
+                                  title={att.filename}
+                                >
+                                  {att.filename}
+                                </div>
+                                <div className="text-xs text-gray-400">
+                                  {formatFileSize(att.size)}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* View: Email List */
+            <div className="flex-1 flex flex-col h-full">
+              {/* List Toolbar */}
+              <div className="h-10 flex items-center px-4 border-b border-[var(--border)] gap-4 text-gray-400">
+                <div className="w-5 h-5 border-2 border-gray-500 rounded-sm"></div>
+                <button onClick={() => fetchEmails(0, true)} title="Refresh">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className={`h-5 w-5 ${
                       loading === 'emails' ? 'animate-spin' : ''
                     }`}
                     fill="none"
@@ -1006,144 +1125,82 @@ export default function Home() {
                     />
                   </svg>
                 </button>
-              </div>
-            </div>
-            {/* Search Input */}
-            <div className="relative">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    searchEmailsFunc(searchQuery, 0, true)
-                  }
-                }}
-                placeholder="搜索邮件..."
-                className="w-full pl-9 pr-8 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm placeholder-white/30 focus:outline-none focus:ring-1 focus:ring-violet-500 focus:border-violet-500"
-              />
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4 text-white/40 absolute left-3 top-1/2 -translate-y-1/2"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
-              {searchQuery && (
-                <button
-                  onClick={() => {
-                    setSearchQuery('')
-                    setEmailOffset(0)
-                    fetchEmails(0, true)
-                  }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-4 w-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div
-            ref={emailListRef}
-            onScroll={handleScroll}
-            className="flex-1 overflow-y-auto"
-          >
-            {!selectedAccount ? (
-              <p className="text-white/50 text-sm text-center py-8">
-                请先选择账户
-              </p>
-            ) : loading === 'emails' ? (
-              <div className="flex justify-center py-8">
-                <div className="w-6 h-6 border-2 border-violet-500 border-t-transparent rounded-full animate-spin"></div>
-              </div>
-            ) : emails.length === 0 ? (
-              <p className="text-white/50 text-sm text-center py-8">无邮件</p>
-            ) : (
-              emails.map(email => {
-                const isSelected = selectedEmail?.uid === email.uid
-                const isUnread = !email.seen
-
-                // 样式优先级: 选中 > 悬停 > 未读 > 已读
-                // 选中: 紫色渐变背景
-                // 未读: 左侧紫色边框 + 淡紫色背景
-                // 已读: 透明背景
-                // 悬停: 更亮的白色背景叠加
-                let baseClasses =
-                  'w-full text-left p-4 border-b border-white/5 transition-all relative'
-
-                if (isSelected) {
-                  baseClasses +=
-                    ' bg-gradient-to-r from-violet-600/30 to-fuchsia-600/20 border-l-2 border-l-violet-400'
-                } else if (isUnread) {
-                  baseClasses +=
-                    ' bg-violet-500/10 border-l-2 border-l-violet-500 hover:bg-violet-500/20'
-                } else {
-                  baseClasses +=
-                    ' border-l-2 border-l-transparent hover:bg-white/10 hover:border-l-white/30'
-                }
-
-                return (
+                <div className="flex-1"></div>
+                <span className="text-xs">
+                  {emails.length} of {totalEmails}
+                </span>
+                <div className="flex items-center gap-2">
                   <button
-                    key={email.uid}
-                    onClick={() => fetchEmail(email.uid)}
-                    className={baseClasses}
+                    disabled={emailOffset === 0}
+                    className="p-1 hover:text-white disabled:opacity-30"
                   >
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <span
-                        className={`text-sm truncate ${
-                          isUnread ? 'font-bold text-white' : 'text-white/70'
-                        } ${isSelected ? 'text-white' : ''}`}
-                      >
-                        {email.from.replace(/<.*>/g, '').trim() || email.from}
-                      </span>
-                      <span
-                        className={`text-xs flex-shrink-0 ${
-                          isSelected ? 'text-white/70' : 'text-white/50'
-                        }`}
-                      >
-                        {formatDate(email.date)}
-                      </span>
-                    </div>
-                    <p
-                      className={`text-sm truncate ${
-                        isUnread
-                          ? 'font-semibold text-white/90'
-                          : 'text-white/60'
-                      } ${isSelected ? 'text-white/90' : ''}`}
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-4 w-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
                     >
-                      {email.subject}
-                    </p>
-                    <div className="flex items-center gap-2 mt-2">
-                      {isUnread && (
-                        <span className="w-2 h-2 bg-violet-400 rounded-full shadow-sm shadow-violet-400/50"></span>
-                      )}
-                      {email.hasAttachments && (
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 19l-7-7 7-7"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    disabled={!hasMoreEmails}
+                    onClick={() => fetchEmails(emailOffset, false)}
+                    className="p-1 hover:text-white disabled:opacity-30"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-4 w-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* List Content */}
+              <div
+                className="flex-1 overflow-y-auto"
+                ref={emailListRef}
+                onScroll={handleScroll}
+              >
+                {loading === 'emails' && emails.length === 0 ? (
+                  <div className="flex justify-center items-center h-full">
+                    <div className="loader"></div>
+                  </div>
+                ) : emails.length === 0 ? (
+                  <div className="flex justify-center items-center h-full text-gray-500 text-sm">
+                    No emails in {selectedFolder}
+                  </div>
+                ) : (
+                  emails.map(email => (
+                    <div
+                      key={email.uid}
+                      onClick={() => fetchEmail(email.uid)}
+                      className={`gmail-email-row group ${
+                        email.seen ? 'read' : 'unread'
+                      }`}
+                    >
+                      {/* Drag handle / Checkbox */}
+                      <div className="flex items-center gap-3 text-gray-500 pl-2">
+                        <div className="w-5 h-5 border-2 border-gray-600 rounded-sm hover:border-white cursor-pointer"></div>
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
-                          className={`h-4 w-4 ${
-                            isSelected ? 'text-white/60' : 'text-white/40'
-                          }`}
+                          className="h-5 w-5 hover:text-yellow-400 cursor-pointer"
                           fill="none"
                           viewBox="0 0 24 24"
                           stroke="currentColor"
@@ -1152,103 +1209,42 @@ export default function Home() {
                             strokeLinecap="round"
                             strokeLinejoin="round"
                             strokeWidth={2}
-                            d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+                            d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
                           />
                         </svg>
-                      )}
-                    </div>
-                  </button>
-                )
-              })
-            )}
-            {/* Load more indicator */}
-            {loadingMore && (
-              <div className="flex justify-center py-4">
-                <div className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin"></div>
-              </div>
-            )}
-            {!loadingMore && hasMoreEmails && emails.length > 0 && (
-              <div className="text-center py-3">
-                <button
-                  onClick={() => {
-                    if (searchQuery) {
-                      searchEmailsFunc(searchQuery, emailOffset, false)
-                    } else {
-                      fetchEmails(emailOffset, false)
-                    }
-                  }}
-                  className="text-sm text-violet-400 hover:text-violet-300 transition-colors"
-                >
-                  加载更多邮件...
-                </button>
-              </div>
-            )}
-            {!hasMoreEmails && emails.length > 0 && (
-              <div className="text-center py-3 text-white/30 text-xs">
-                已加载全部 {emails.length} 封{searchQuery ? '搜索结果' : '邮件'}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Email Content */}
-        <main className="flex-1 flex flex-col bg-black/5">
-          {loading === 'email' ? (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="w-10 h-10 border-3 border-violet-500 border-t-transparent rounded-full animate-spin"></div>
-            </div>
-          ) : selectedEmail ? (
-            <>
-              {/* Email Header */}
-              <div className="p-6 border-b border-white/10 bg-black/20">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h2 className="text-xl font-bold text-white mb-4">
-                      {selectedEmail.subject}
-                    </h2>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex items-center gap-2">
-                        <span className="text-white/50 w-12">发件人:</span>
-                        <span className="text-white">{selectedEmail.from}</span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-white/50 w-12">收件人:</span>
-                        <span className="text-white/80">
-                          {selectedEmail.to}
+
+                      <div className="min-w-[160px] max-w-[200px] truncate font-bold text-white pr-4">
+                        {email.from.replace(/<.*>/, '').trim() || 'Unknown'}
+                      </div>
+
+                      <div className="flex-1 truncate text-gray-300">
+                        <span className="text-white font-medium">
+                          {email.subject || '(No Subject)'}
+                        </span>
+                        <span className="text-gray-500 mx-2">-</span>
+                        <span className="text-gray-500">
+                          No snippet available (IMAP fetch limited)
                         </span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-white/50 w-12">时间:</span>
-                        <span className="text-white/80">
-                          {new Date(selectedEmail.date).toLocaleString('zh-CN')}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => deleteEmailHandler(selectedEmail.uid)}
-                    disabled={loading === 'delete'}
-                    className="px-4 py-2 bg-red-500/20 hover:bg-red-500/40 text-red-300 rounded-lg transition-colors text-sm"
-                  >
-                    删除
-                  </button>
-                </div>
 
-                {/* Attachments */}
-                {selectedEmail.attachments.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-white/10">
-                    <h3 className="text-sm font-semibold text-white/70 mb-2">
-                      附件 ({selectedEmail.attachments.length})
-                    </h3>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedEmail.attachments.map((att, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-center gap-2 px-3 py-2 bg-white/10 rounded-lg text-sm"
+                      <div className="text-xs font-bold text-gray-400 w-24 text-right flex-shrink-0 group-hover:hidden">
+                        {formatDate(email.date)}
+                      </div>
+
+                      {/* Hover Actions */}
+                      <div className="w-24 hidden group-hover:flex items-center justify-end gap-2 pr-2">
+                        <button
+                          onClick={e => {
+                            e.stopPropagation()
+                            deleteEmailHandler(email.uid)
+                          }}
+                          className="p-2 hover:bg-gray-600 rounded-full text-gray-300"
+                          title="Delete"
                         >
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
-                            className="h-4 w-4 text-white/50"
+                            className="h-4 w-4"
                             fill="none"
                             viewBox="0 0 24 24"
                             stroke="currentColor"
@@ -1257,165 +1253,125 @@ export default function Home() {
                               strokeLinecap="round"
                               strokeLinejoin="round"
                               strokeWidth={2}
-                              d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                             />
                           </svg>
-                          <span className="text-white/80">{att.filename}</span>
-                          <span className="text-white/50">
-                            ({formatFileSize(att.size)})
-                          </span>
-                        </div>
-                      ))}
+                        </button>
+                        <button
+                          className="p-2 hover:bg-gray-600 rounded-full text-gray-300"
+                          title="Archive"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="h-4 w-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8m-5 5h2.586a1 1 0 01.707.293l2.414 2.414a1 1 0 00.707.293h3.172a1 1 0 00.707-.293l2.414-2.414a1 1 0 01.707-.293H20"
+                            />
+                          </svg>
+                        </button>
+                      </div>
                     </div>
+                  ))
+                )}
+                {loadingMore && (
+                  <div className="p-4 text-center">
+                    <div className="loader mx-auto w-6 h-6 border-2"></div>
                   </div>
                 )}
               </div>
-
-              {/* Email Body */}
-              <div className="flex-1 overflow-y-auto p-6">
-                {selectedEmail.html ? (
-                  <div
-                    className="prose prose-invert max-w-none bg-white rounded-lg p-4"
-                    dangerouslySetInnerHTML={{ __html: selectedEmail.html }}
-                  />
-                ) : (
-                  <pre className="text-white/80 whitespace-pre-wrap font-sans text-sm leading-relaxed">
-                    {selectedEmail.text || '(无内容)'}
-                  </pre>
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-16 w-16 mx-auto text-white/20 mb-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1}
-                    d="M3 19v-8.93a2 2 0 01.89-1.664l7-4.666a2 2 0 012.22 0l7 4.666A2 2 0 0121 10.07V19M3 19a2 2 0 002 2h14a2 2 0 002-2M3 19l6.75-4.5M21 19l-6.75-4.5M3 10l6.75 4.5M21 10l-6.75 4.5m0 0l-1.14.76a2 2 0 01-2.22 0l-1.14-.76"
-                  />
-                </svg>
-                <p className="text-white/50">选择邮件以查看内容</p>
-              </div>
             </div>
           )}
-        </main>
+        </div>
       </div>
 
-      {/* Click outside to close account selector */}
-      {showAccountSelector && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => setShowAccountSelector(false)}
-        />
-      )}
-
-      {/* Add Account Modal */}
+      {/* Modals */}
       {showAddAccount && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden border border-white/10">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100]">
+          <div className="bg-[#2d2e30] rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden border border-white/10">
             <div className="p-6 border-b border-white/10">
-              <h2 className="text-xl font-bold text-white">添加 IMAP 账户</h2>
+              <h2 className="text-xl font-normal text-white">Add Account</h2>
             </div>
-
             <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-white/70 mb-2">
-                  账户名称 (可选)
-                </label>
-                <input
-                  type="text"
-                  value={newAccount.name}
-                  onChange={e =>
-                    setNewAccount({ ...newAccount, name: e.target.value })
-                  }
-                  placeholder="例如：工作邮箱"
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-white/70 mb-2">
-                  邮箱地址 *
-                </label>
-                <input
-                  type="email"
-                  value={newAccount.email}
-                  onChange={e =>
-                    setNewAccount({ ...newAccount, email: e.target.value })
-                  }
-                  placeholder="you@example.com"
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-white/70 mb-2">
-                  密码 *
-                </label>
-                <input
-                  type="password"
-                  value={newAccount.password}
-                  onChange={e =>
-                    setNewAccount({ ...newAccount, password: e.target.value })
-                  }
-                  placeholder="输入密码"
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-white/70 mb-2">
-                  IMAP 服务器 *
-                </label>
-                <select
-                  value={newAccount.serverId}
-                  onChange={e =>
-                    setNewAccount({ ...newAccount, serverId: e.target.value })
-                  }
-                  className="w-full px-4 py-3 bg-slate-700 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
-                >
-                  {servers.map(server => (
-                    <option key={server.id} value={server.id}>
-                      {server.name} ({server.host}:{server.port})
-                    </option>
-                  ))}
-                </select>
-                <button
-                  onClick={() => {
-                    setShowAddAccount(false)
-                    setShowServerManager(true)
-                  }}
-                  className="text-xs text-violet-400 hover:text-violet-300 mt-2"
-                >
-                  + 添加新服务器
-                </button>
-              </div>
+              <input
+                type="text"
+                placeholder="Email"
+                className="w-full px-4 py-3 bg-[#1f1f1f] border border-gray-600 rounded text-white focus:border-blue-500 outline-none"
+                value={newAccount.email}
+                onChange={e =>
+                  setNewAccount({ ...newAccount, email: e.target.value })
+                }
+              />
+              <input
+                type="password"
+                placeholder="Password"
+                className="w-full px-4 py-3 bg-[#1f1f1f] border border-gray-600 rounded text-white focus:border-blue-500 outline-none"
+                value={newAccount.password}
+                onChange={e =>
+                  setNewAccount({ ...newAccount, password: e.target.value })
+                }
+              />
+              <select
+                className="w-full px-4 py-3 bg-[#1f1f1f] border border-gray-600 rounded text-white outline-none"
+                value={newAccount.serverId}
+                onChange={e =>
+                  setNewAccount({ ...newAccount, serverId: e.target.value })
+                }
+              >
+                {servers.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
 
               {/* Connection Status */}
               {connectionStatus !== 'idle' && (
                 <div
-                  className={`p-3 rounded-lg text-sm ${
+                  className={`p-3 rounded text-sm ${
                     connectionStatus === 'success'
-                      ? 'bg-green-500/20 text-green-300 border border-green-500/50'
-                      : 'bg-red-500/20 text-red-300 border border-red-500/50'
+                      ? 'bg-green-900/30 text-green-400'
+                      : 'bg-red-900/30 text-red-400'
                   }`}
                 >
                   {connectionStatus === 'success'
-                    ? '✓ 连接测试成功！'
-                    : '✕ 连接测试失败'}
+                    ? 'Connection successful'
+                    : 'Connection failed'}
                 </div>
               )}
-            </div>
 
-            <div className="p-6 border-t border-white/10 flex justify-between gap-3">
+              {/* Assuming there's an account selector dropdown somewhere else,
+                  this button would be placed there. For now, placing it near
+                  other account management buttons for context. */}
+              {/* This button is added based on the instruction, but its exact placement
+                  in the 'account dropdown' is not clear from the provided snippet.
+                  Placing it here for now, assuming it's part of a broader account management section. */}
+              <button
+                onClick={() => {
+                  setShowAccountSelector(false)
+                  setShowBulkImport(true)
+                }}
+                className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-white/5 rounded"
+              >
+                Bulk Import
+              </button>
+              <button
+                onClick={() => {
+                  setShowAddAccount(false)
+                  setShowServerManager(true)
+                }}
+                className="text-blue-400 text-sm"
+              >
+                Manage Servers
+              </button>
+            </div>
+            <div className="p-6 flex justify-end gap-3">
               <button
                 onClick={() =>
                   testConnection(
@@ -1427,167 +1383,115 @@ export default function Home() {
                 disabled={
                   testingConnection || !newAccount.email || !newAccount.password
                 }
-                className="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm font-medium transition-all disabled:opacity-50"
+                className="px-4 py-2 text-white hover:bg-white/10 rounded disabled:opacity-50"
               >
-                {testingConnection ? '测试中...' : '测试连接'}
+                {testingConnection ? 'Testing...' : 'Test Connection'}
               </button>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    setShowAddAccount(false)
-                    setConnectionStatus('idle')
-                    setNewAccount({
-                      name: '',
-                      email: '',
-                      serverId: servers.length > 0 ? servers[0].id : '',
-                      password: '',
-                    })
-                  }}
-                  className="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm font-medium transition-all"
-                >
-                  取消
-                </button>
-                <button
-                  onClick={addAccount}
-                  className="px-5 py-2.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white rounded-lg text-sm font-medium transition-all shadow-lg"
-                >
-                  添加账户
-                </button>
-              </div>
+              <button
+                onClick={() => setShowAddAccount(false)}
+                className="px-4 py-2 text-white hover:bg-white/10 rounded"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={addAccount}
+                className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-500"
+              >
+                Add Account
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Server Manager Modal */}
       {showServerManager && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden border border-white/10">
-            <div className="p-6 border-b border-white/10">
-              <h2 className="text-xl font-bold text-white">IMAP 服务器管理</h2>
-              <p className="text-sm text-white/50 mt-1">
-                管理可用的 IMAP 服务器配置
-              </p>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100]">
+          <div className="bg-[#2d2e30] rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden border border-white/10">
+            <div className="p-6 border-b border-white/10 flex justify-between items-center">
+              <h2 className="text-xl font-normal text-white">
+                Server Management
+              </h2>
+              <button
+                onClick={() => setShowServerManager(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                ✕
+              </button>
             </div>
-
             <div className="p-6">
-              {/* Server List */}
               <div className="space-y-2 mb-6 max-h-48 overflow-y-auto">
                 {servers.map(server => (
                   <div
                     key={server.id}
-                    className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/10"
+                    className="flex items-center justify-between p-3 bg-[#1f1f1f] rounded border border-white/10"
                   >
                     <div>
                       <div className="font-medium text-white">
                         {server.name}
                       </div>
-                      <div className="text-sm text-white/50">
-                        {server.host}:{server.port} {server.tls && '(SSL/TLS)'}
+                      <div className="text-sm text-gray-500">
+                        {server.host}:{server.port}
                       </div>
                     </div>
                     <button
                       onClick={() => removeServer(server.id)}
-                      className="p-2 text-white/30 hover:text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                      className="text-red-400 hover:bg-red-400/10 p-2 rounded"
                     >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-5 w-5"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                        />
-                      </svg>
+                      Delete
                     </button>
                   </div>
                 ))}
               </div>
-
-              {/* Add New Server */}
-              <div className="p-4 bg-white/5 rounded-lg border border-white/10">
-                <h3 className="text-sm font-semibold text-white/70 mb-4">
-                  添加新服务器
+              <div className="p-4 bg-[#1f1f1f] rounded border border-white/10">
+                <h3 className="text-sm font-bold text-gray-400 mb-3">
+                  Add New Server
                 </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs text-white/50 mb-1">
-                      服务器名称
-                    </label>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <input
+                    type="text"
+                    placeholder="Name"
+                    value={newServer.name}
+                    onChange={e =>
+                      setNewServer({ ...newServer, name: e.target.value })
+                    }
+                    className="px-3 py-2 bg-[#2d2e30] rounded text-white border border-gray-600"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Host"
+                    value={newServer.host}
+                    onChange={e =>
+                      setNewServer({ ...newServer, host: e.target.value })
+                    }
+                    className="px-3 py-2 bg-[#2d2e30] rounded text-white border border-gray-600"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Port"
+                    value={newServer.port}
+                    onChange={e =>
+                      setNewServer({ ...newServer, port: e.target.value })
+                    }
+                    className="px-3 py-2 bg-[#2d2e30] rounded text-white border border-gray-600"
+                  />
+                  <label className="flex items-center gap-2 text-white">
                     <input
-                      type="text"
-                      value={newServer.name}
+                      type="checkbox"
+                      checked={newServer.tls}
                       onChange={e =>
-                        setNewServer({ ...newServer, name: e.target.value })
+                        setNewServer({ ...newServer, tls: e.target.checked })
                       }
-                      placeholder="例如：My Mail"
-                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-white/50 mb-1">
-                      服务器地址
-                    </label>
-                    <input
-                      type="text"
-                      value={newServer.host}
-                      onChange={e =>
-                        setNewServer({ ...newServer, host: e.target.value })
-                      }
-                      placeholder="imap.example.com"
-                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-white/50 mb-1">
-                      端口
-                    </label>
-                    <input
-                      type="text"
-                      value={newServer.port}
-                      onChange={e =>
-                        setNewServer({ ...newServer, port: e.target.value })
-                      }
-                      placeholder="993"
-                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-                    />
-                  </div>
-                  <div className="flex items-end">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={newServer.tls}
-                        onChange={e =>
-                          setNewServer({ ...newServer, tls: e.target.checked })
-                        }
-                        className="w-4 h-4 rounded bg-white/5 border border-white/20 text-violet-500 focus:ring-violet-500"
-                      />
-                      <span className="text-sm text-white/70">SSL/TLS</span>
-                    </label>
-                  </div>
+                    />{' '}
+                    TLS
+                  </label>
                 </div>
                 <button
                   onClick={addServer}
-                  className="mt-4 px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white text-sm rounded-lg transition-colors"
+                  className="px-4 py-2 bg-blue-600 text-white rounded text-sm"
                 >
-                  添加服务器
+                  Add Server
                 </button>
               </div>
-            </div>
-
-            <div className="p-6 border-t border-white/10 flex justify-end">
-              <button
-                onClick={() => setShowServerManager(false)}
-                className="px-5 py-2.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white rounded-lg text-sm font-medium transition-all"
-              >
-                完成
-              </button>
             </div>
           </div>
         </div>
@@ -1595,110 +1499,91 @@ export default function Home() {
 
       {/* Bulk Import Modal */}
       {showBulkImport && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden border border-white/10">
-            <div className="p-6 border-b border-white/10">
-              <h2 className="text-xl font-bold text-white">批量导入账户</h2>
-              <p className="text-sm text-white/50 mt-1">快速导入多个邮箱账户</p>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100]">
+          <div className="bg-[#2d2e30] rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden border border-white/10">
+            <div className="p-6 border-b border-white/10 flex justify-between items-center">
+              <h2 className="text-xl font-normal text-white">
+                Bulk Import Accounts
+              </h2>
+              <button
+                onClick={() => setShowBulkImport(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                ✕
+              </button>
             </div>
 
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-white/70 mb-2">
-                  选择 IMAP 服务器
-                </label>
-                <select
-                  value={bulkServerId}
-                  onChange={e => setBulkServerId(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-700 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
-                >
-                  {servers.map(server => (
-                    <option key={server.id} value={server.id}>
-                      {server.name} ({server.host}:{server.port})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-white/70 mb-2">
-                  账户数据{' '}
-                  <span className="text-white/50 font-normal">
-                    (格式：email----password，每行一个)
-                  </span>
-                </label>
-                <textarea
-                  value={bulkText}
-                  onChange={e => setBulkText(e.target.value)}
-                  placeholder="example1@mail.com----password1&#10;example2@mail.com----password2&#10;example3@mail.com----password3"
-                  rows={10}
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-violet-500 font-mono text-sm resize-none"
-                />
-              </div>
-
-              {/* Preview */}
-              {bulkText && (
-                <div className="p-3 bg-white/5 rounded-lg border border-white/10">
-                  <div className="text-sm text-white/70">
-                    检测到{' '}
-                    <span className="text-violet-400 font-bold">
-                      {parseBulkAccounts(bulkText).length}
-                    </span>{' '}
-                    个有效账户
+            <div className="p-6">
+              {!importProgress ? (
+                <>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                      Format: email----password (one per line)
+                    </label>
+                    <textarea
+                      value={bulkText}
+                      onChange={e => setBulkText(e.target.value)}
+                      placeholder={
+                        'user1@example.com----pass1\nuser2@example.com----pass2'
+                      }
+                      className="w-full h-48 px-4 py-3 bg-[#1f1f1f] border border-gray-600 rounded text-white font-mono text-sm focus:border-blue-500 outline-none"
+                    />
                   </div>
-                </div>
-              )}
 
-              {/* Import Progress */}
-              {importProgress && (
-                <div className="p-4 bg-violet-600/20 rounded-lg border border-violet-500/50">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-white">
-                      {importProgress.status}
-                    </span>
-                    <span className="text-sm text-white/70">
-                      {importProgress.current} / {importProgress.total}
-                    </span>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                      Assign to Server
+                    </label>
+                    <select
+                      value={bulkServerId}
+                      onChange={e => setBulkServerId(e.target.value)}
+                      className="w-full px-4 py-3 bg-[#1f1f1f] border border-gray-600 rounded text-white outline-none"
+                    >
+                      {servers.map(server => (
+                        <option key={server.id} value={server.id}>
+                          {server.name} ({server.host})
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                  <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={() => setShowBulkImport(false)}
+                      className="px-4 py-2 text-white hover:bg-white/10 rounded"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleBulkImport}
+                      disabled={!bulkText.trim() || !bulkServerId}
+                      className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-500 disabled:opacity-50"
+                    >
+                      Start Import
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="py-8 text-center">
+                  <div className="loader mx-auto w-10 h-10 border-4 mb-4"></div>
+                  <h3 className="text-lg font-medium text-white mb-2">
+                    {importProgress.status}
+                  </h3>
+                  <div className="w-full bg-gray-700 rounded-full h-2.5 mb-2 max-w-md mx-auto">
                     <div
-                      className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 transition-all"
+                      className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
                       style={{
                         width: `${
                           (importProgress.current / importProgress.total) * 100
                         }%`,
                       }}
-                    />
+                    ></div>
                   </div>
+                  <p className="text-sm text-gray-400">
+                    {importProgress.current} / {importProgress.total}
+                  </p>
                 </div>
               )}
-            </div>
-
-            <div className="p-6 border-t border-white/10 flex justify-end gap-3">
-              <button
-                onClick={() => {
-                  setShowBulkImport(false)
-                  setBulkText('')
-                  setImportProgress(null)
-                }}
-                className="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm font-medium transition-all"
-                disabled={!!importProgress}
-              >
-                取消
-              </button>
-              <button
-                onClick={handleBulkImport}
-                disabled={
-                  !bulkText ||
-                  !!importProgress ||
-                  parseBulkAccounts(bulkText).length === 0
-                }
-                className="px-5 py-2.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white rounded-lg text-sm font-medium transition-all shadow-lg disabled:opacity-50"
-              >
-                {importProgress
-                  ? '导入中...'
-                  : `导入 ${parseBulkAccounts(bulkText).length} 个账户`}
-              </button>
             </div>
           </div>
         </div>
