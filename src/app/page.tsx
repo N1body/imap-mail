@@ -59,8 +59,8 @@ export default function Home() {
   const [newServer, setNewServer] = useState({
     name: '',
     host: '',
-    port: '',
-    tls: false,
+    port: '993',
+    tls: true,
   })
 
   // Account management
@@ -151,7 +151,12 @@ export default function Home() {
       const parsed = JSON.parse(savedAccounts)
       setAccounts(parsed)
       if (parsed.length > 0) {
-        setSelectedAccount(parsed[0])
+        // Try to restore previously selected account
+        const savedSelectedId = localStorage.getItem('imap-selected-account')
+        const selectedAcc = savedSelectedId
+          ? parsed.find((a: ImapAccount) => a.id === savedSelectedId)
+          : null
+        setSelectedAccount(selectedAcc || parsed[0])
       }
     }
 
@@ -746,6 +751,10 @@ export default function Home() {
                           }`}
                           onClick={() => {
                             setSelectedAccount(acc)
+                            localStorage.setItem(
+                              'imap-selected-account',
+                              acc.id
+                            )
                             setShowAccountSelector(false)
                           }}
                         >
