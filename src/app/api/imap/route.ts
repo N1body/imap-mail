@@ -6,13 +6,14 @@ import {
   getEmailByUid,
   deleteEmail,
   markAsRead,
+  searchEmails,
   ImapConfig,
 } from '@/lib/imap'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { action, config, folder, uid, limit } = body
+    const { action, config, folder, uid, limit, offset, query } = body
 
     if (
       !config ||
@@ -53,8 +54,36 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           )
         }
-        const emails = await getEmails(imapConfig, folder, limit || 50)
-        return NextResponse.json({ emails })
+        const result = await getEmails(
+          imapConfig,
+          folder,
+          limit || 50,
+          offset || 0
+        )
+        return NextResponse.json(result)
+      }
+
+      case 'search': {
+        if (!folder) {
+          return NextResponse.json(
+            { error: 'Folder is required' },
+            { status: 400 }
+          )
+        }
+        if (!query) {
+          return NextResponse.json(
+            { error: 'Search query is required' },
+            { status: 400 }
+          )
+        }
+        const searchResult = await searchEmails(
+          imapConfig,
+          folder,
+          query,
+          limit || 50,
+          offset || 0
+        )
+        return NextResponse.json(searchResult)
       }
 
       case 'email': {

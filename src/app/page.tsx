@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import ConfirmDialog from '@/components/ConfirmDialog'
 import Toast from '@/components/Toast'
@@ -76,6 +76,14 @@ export default function Home() {
   const [folders, setFolders] = useState<Folder[]>([])
   const [selectedFolder, setSelectedFolder] = useState<string>('INBOX')
   const [emails, setEmails] = useState<Email[]>([])
+  const [totalEmails, setTotalEmails] = useState(0)
+  const [hasMoreEmails, setHasMoreEmails] = useState(false)
+  const [emailOffset, setEmailOffset] = useState(0)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const emailListRef = useRef<HTMLDivElement>(null)
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('')
   const [selectedEmail, setSelectedEmail] = useState<EmailDetail | null>(null)
 
   // UI state
@@ -125,11 +133,17 @@ export default function Home() {
     type: 'success',
   })
 
+  // Track if data has been loaded from localStorage
+  const [isDataLoaded, setIsDataLoaded] = useState(false)
+
   // Load data from localStorage
   useEffect(() => {
     const savedServers = localStorage.getItem('imap-servers')
     if (savedServers) {
-      setServers(JSON.parse(savedServers))
+      const parsed = JSON.parse(savedServers)
+      if (parsed.length > 0) {
+        setServers(parsed)
+      }
     }
 
     const savedAccounts = localStorage.getItem('imap-accounts-v2')
@@ -140,20 +154,31 @@ export default function Home() {
         setSelectedAccount(parsed[0])
       }
     }
+
+    // Mark data as loaded after reading from localStorage
+    setIsDataLoaded(true)
   }, [])
 
-  // Save data to localStorage
+  // Save data to localStorage (only after initial load)
   useEffect(() => {
-    localStorage.setItem('imap-servers', JSON.stringify(servers))
-  }, [servers])
+    if (!isDataLoaded) return // Don't save before data is loaded
+
+    if (servers.length > 0) {
+      localStorage.setItem('imap-servers', JSON.stringify(servers))
+    } else {
+      localStorage.removeItem('imap-servers')
+    }
+  }, [servers, isDataLoaded])
 
   useEffect(() => {
+    if (!isDataLoaded) return // Don't save before data is loaded
+
     if (accounts.length > 0) {
       localStorage.setItem('imap-accounts-v2', JSON.stringify(accounts))
     } else {
       localStorage.removeItem('imap-accounts-v2')
     }
-  }, [accounts])
+  }, [accounts, isDataLoaded])
 
   // Update default serverId when servers change
   useEffect(() => {
@@ -188,7 +213,9 @@ export default function Home() {
   // Fetch emails when folder changes
   useEffect(() => {
     if (selectedAccount && selectedFolder) {
-      fetchEmails()
+      setSearchQuery('')
+      setEmailOffset(0)
+      fetchEmails(0, true)
     }
   }, [selectedAccount, selectedFolder])
 
@@ -236,22 +263,107 @@ export default function Home() {
     }
   }
 
-  const fetchEmails = async () => {
+  const fetchEmails = async (offset: number = 0, reset: boolean = false) => {
     try {
-      setLoading('emails')
+      if (reset) {
+        setLoading('emails')
+        setSelectedEmail(null)
+      } else {
+        setLoadingMore(true)
+      }
       setError('')
-      setSelectedEmail(null)
       const data = await apiCall('emails', {
         folder: selectedFolder,
         limit: 50,
+        offset,
       })
-      setEmails(data.emails || [])
+      const newEmails = data.emails || []
+      if (reset) {
+        setEmails(newEmails)
+      } else {
+        // Append and deduplicate by uid
+        setEmails(prev => {
+          const existingUids = new Set(prev.map(e => e.uid))
+          const uniqueNew = newEmails.filter(
+            (e: Email) => !existingUids.has(e.uid)
+          )
+          return [...prev, ...uniqueNew]
+        })
+      }
+      setTotalEmails(data.total || 0)
+      setHasMoreEmails(data.hasMore || false)
+      setEmailOffset(offset + newEmails.length)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch emails')
     } finally {
       setLoading('')
+      setLoadingMore(false)
     }
   }
+
+  const searchEmailsFunc = async (
+    query: string,
+    offset: number = 0,
+    reset: boolean = true
+  ) => {
+    if (!query.trim()) {
+      setEmailOffset(0)
+      fetchEmails(0, true)
+      return
+    }
+    try {
+      if (reset) {
+        setLoading('emails')
+        setSelectedEmail(null)
+      } else {
+        setLoadingMore(true)
+      }
+      setError('')
+      const data = await apiCall('search', {
+        folder: selectedFolder,
+        query: query.trim(),
+        limit: 50,
+        offset,
+      })
+      const newEmails = data.emails || []
+      if (reset) {
+        setEmails(newEmails)
+      } else {
+        // Append and deduplicate by uid
+        setEmails(prev => {
+          const existingUids = new Set(prev.map(e => e.uid))
+          const uniqueNew = newEmails.filter(
+            (e: Email) => !existingUids.has(e.uid)
+          )
+          return [...prev, ...uniqueNew]
+        })
+      }
+      setTotalEmails(data.total || 0)
+      setHasMoreEmails(data.hasMore || false)
+      setEmailOffset(offset + newEmails.length)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to search emails')
+    } finally {
+      setLoading('')
+      setLoadingMore(false)
+    }
+  }
+
+  const handleScroll = useCallback(() => {
+    const container = emailListRef.current
+    if (!container) return
+
+    const { scrollTop, scrollHeight, clientHeight } = container
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 100
+
+    if (isNearBottom && hasMoreEmails && !loadingMore && loading !== 'emails') {
+      if (searchQuery) {
+        searchEmailsFunc(searchQuery, emailOffset, false)
+      } else {
+        fetchEmails(emailOffset, false)
+      }
+    }
+  }, [hasMoreEmails, loadingMore, loading, emailOffset, searchQuery])
 
   const fetchEmail = async (uid: number) => {
     try {
@@ -858,20 +970,61 @@ export default function Home() {
 
         {/* Email List */}
         <div className="w-96 bg-black/10 border-r border-white/10 flex flex-col">
-          <div className="p-4 border-b border-white/10 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-white/70 uppercase tracking-wider">
-              {selectedFolder || '收件箱'}
-            </h2>
-            <button
-              onClick={fetchEmails}
-              disabled={loading === 'emails' || !selectedAccount}
-              className="text-white/50 hover:text-white transition-colors disabled:opacity-30"
-            >
+          <div className="p-4 border-b border-white/10">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-white/70 uppercase tracking-wider">
+                {selectedFolder || '收件箱'}
+              </h2>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-white/40">
+                  {emails.length}
+                  {totalEmails > 0 ? `/${totalEmails}` : ''}
+                </span>
+                <button
+                  onClick={() => {
+                    setSearchQuery('')
+                    setEmailOffset(0)
+                    fetchEmails(0, true)
+                  }}
+                  disabled={loading === 'emails' || !selectedAccount}
+                  className="text-white/50 hover:text-white transition-colors disabled:opacity-30"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className={`h-4 w-4 ${
+                      loading === 'emails' ? 'animate-spin' : ''
+                    }`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            {/* Search Input */}
+            <div className="relative">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    searchEmailsFunc(searchQuery, 0, true)
+                  }
+                }}
+                placeholder="搜索邮件..."
+                className="w-full pl-9 pr-8 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm placeholder-white/30 focus:outline-none focus:ring-1 focus:ring-violet-500 focus:border-violet-500"
+              />
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                className={`h-4 w-4 ${
-                  loading === 'emails' ? 'animate-spin' : ''
-                }`}
+                className="h-4 w-4 text-white/40 absolute left-3 top-1/2 -translate-y-1/2"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -880,13 +1033,42 @@ export default function Home() {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
                 />
               </svg>
-            </button>
+              {searchQuery && (
+                <button
+                  onClick={() => {
+                    setSearchQuery('')
+                    setEmailOffset(0)
+                    fetchEmails(0, true)
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <div
+            ref={emailListRef}
+            onScroll={handleScroll}
+            className="flex-1 overflow-y-auto"
+          >
             {!selectedAccount ? (
               <p className="text-white/50 text-sm text-center py-8">
                 请先选择账户
@@ -898,58 +1080,113 @@ export default function Home() {
             ) : emails.length === 0 ? (
               <p className="text-white/50 text-sm text-center py-8">无邮件</p>
             ) : (
-              emails.map(email => (
-                <button
-                  key={email.uid}
-                  onClick={() => fetchEmail(email.uid)}
-                  className={`w-full text-left p-4 border-b border-white/5 transition-all hover:bg-white/5 ${
-                    selectedEmail?.uid === email.uid ? 'bg-violet-600/20' : ''
-                  } ${!email.seen ? 'bg-white/5' : ''}`}
-                >
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <span
-                      className={`text-sm truncate ${
-                        !email.seen ? 'font-bold text-white' : 'text-white/80'
-                      }`}
-                    >
-                      {email.from.replace(/<.*>/g, '').trim() || email.from}
-                    </span>
-                    <span className="text-xs text-white/50 flex-shrink-0">
-                      {formatDate(email.date)}
-                    </span>
-                  </div>
-                  <p
-                    className={`text-sm truncate ${
-                      !email.seen
-                        ? 'font-semibold text-white/90'
-                        : 'text-white/70'
-                    }`}
+              emails.map(email => {
+                const isSelected = selectedEmail?.uid === email.uid
+                const isUnread = !email.seen
+
+                // 样式优先级: 选中 > 悬停 > 未读 > 已读
+                // 选中: 紫色渐变背景
+                // 未读: 左侧紫色边框 + 淡紫色背景
+                // 已读: 透明背景
+                // 悬停: 更亮的白色背景叠加
+                let baseClasses =
+                  'w-full text-left p-4 border-b border-white/5 transition-all relative'
+
+                if (isSelected) {
+                  baseClasses +=
+                    ' bg-gradient-to-r from-violet-600/30 to-fuchsia-600/20 border-l-2 border-l-violet-400'
+                } else if (isUnread) {
+                  baseClasses +=
+                    ' bg-violet-500/10 border-l-2 border-l-violet-500 hover:bg-violet-500/20'
+                } else {
+                  baseClasses +=
+                    ' border-l-2 border-l-transparent hover:bg-white/10 hover:border-l-white/30'
+                }
+
+                return (
+                  <button
+                    key={email.uid}
+                    onClick={() => fetchEmail(email.uid)}
+                    className={baseClasses}
                   >
-                    {email.subject}
-                  </p>
-                  <div className="flex items-center gap-2 mt-2">
-                    {!email.seen && (
-                      <span className="w-2 h-2 bg-violet-500 rounded-full"></span>
-                    )}
-                    {email.hasAttachments && (
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-4 w-4 text-white/50"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <span
+                        className={`text-sm truncate ${
+                          isUnread ? 'font-bold text-white' : 'text-white/70'
+                        } ${isSelected ? 'text-white' : ''}`}
                       >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
-                        />
-                      </svg>
-                    )}
-                  </div>
+                        {email.from.replace(/<.*>/g, '').trim() || email.from}
+                      </span>
+                      <span
+                        className={`text-xs flex-shrink-0 ${
+                          isSelected ? 'text-white/70' : 'text-white/50'
+                        }`}
+                      >
+                        {formatDate(email.date)}
+                      </span>
+                    </div>
+                    <p
+                      className={`text-sm truncate ${
+                        isUnread
+                          ? 'font-semibold text-white/90'
+                          : 'text-white/60'
+                      } ${isSelected ? 'text-white/90' : ''}`}
+                    >
+                      {email.subject}
+                    </p>
+                    <div className="flex items-center gap-2 mt-2">
+                      {isUnread && (
+                        <span className="w-2 h-2 bg-violet-400 rounded-full shadow-sm shadow-violet-400/50"></span>
+                      )}
+                      {email.hasAttachments && (
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className={`h-4 w-4 ${
+                            isSelected ? 'text-white/60' : 'text-white/40'
+                          }`}
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                  </button>
+                )
+              })
+            )}
+            {/* Load more indicator */}
+            {loadingMore && (
+              <div className="flex justify-center py-4">
+                <div className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            )}
+            {!loadingMore && hasMoreEmails && emails.length > 0 && (
+              <div className="text-center py-3">
+                <button
+                  onClick={() => {
+                    if (searchQuery) {
+                      searchEmailsFunc(searchQuery, emailOffset, false)
+                    } else {
+                      fetchEmails(emailOffset, false)
+                    }
+                  }}
+                  className="text-sm text-violet-400 hover:text-violet-300 transition-colors"
+                >
+                  加载更多邮件...
                 </button>
-              ))
+              </div>
+            )}
+            {!hasMoreEmails && emails.length > 0 && (
+              <div className="text-center py-3 text-white/30 text-xs">
+                已加载全部 {emails.length} 封{searchQuery ? '搜索结果' : '邮件'}
+              </div>
             )}
           </div>
         </div>
