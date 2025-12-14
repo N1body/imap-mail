@@ -23,6 +23,10 @@ function MailLayoutContent({ children }: { children: React.ReactNode }) {
     addAccount,
     removeAccount,
     removeServer,
+    showConfirm,
+    showToast,
+    confirmDialogState,
+    toastState,
   } = useMailContext()
 
   const [showAccountSelector, setShowAccountSelector] = useState(false)
@@ -56,45 +60,8 @@ function MailLayoutContent({ children }: { children: React.ReactNode }) {
     message: string
   } | null>(null)
 
-  // Confirm dialog state
-  const [confirmDialog, setConfirmDialog] = useState<{
-    isOpen: boolean
-    title: string
-    message: string
-    confirmText?: string
-    confirmStyle?: 'danger' | 'primary'
-    onConfirm: () => void
-  }>({ isOpen: false, title: '', message: '', onConfirm: () => {} })
-
-  // Toast state
-  const [toast, setToast] = useState<{
-    isVisible: boolean
-    message: string
-    type: 'success' | 'error' | 'info'
-  }>({ isVisible: false, message: '', type: 'success' })
-
-  const showToast = useCallback(
-    (message: string, type: 'success' | 'error' | 'info' = 'success') => {
-      setToast({ isVisible: true, message, type })
-    },
-    []
-  )
-
-  const showConfirm = useCallback(
-    (options: {
-      title: string
-      message: string
-      confirmText?: string
-      confirmStyle?: 'danger' | 'primary'
-      onConfirm: () => void
-    }) => {
-      setConfirmDialog({ isOpen: true, ...options })
-    },
-    []
-  )
-
   // Get current folder from URL params
-  const currentFolder = decodeURIComponent((params.folder as string) || 'INBOX')
+  const currentFolder = decodeURIComponent((params.folder as string) || 'inbox')
 
   const apiCall = useCallback(
     async (action: string, params: Record<string, unknown> = {}) => {
@@ -810,13 +777,15 @@ function MailLayoutContent({ children }: { children: React.ReactNode }) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  账号列表（每行一个，格式：邮箱:密码）
+                  账号列表（每行一个，格式：邮箱----密码）
                 </label>
                 <textarea
                   value={bulkImportText}
                   onChange={e => setBulkImportText(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent h-48 font-mono text-sm text-gray-900"
-                  placeholder="user1@example.com:password1&#10;user2@example.com:password2"
+                  placeholder={
+                    'user1@example.com----password1\nuser2@example.com----password2'
+                  }
                 />
               </div>
             </div>
@@ -1024,25 +993,27 @@ function MailLayoutContent({ children }: { children: React.ReactNode }) {
 
       {/* Confirm Dialog */}
       <ConfirmDialog
-        isOpen={confirmDialog.isOpen}
-        title={confirmDialog.title}
-        message={confirmDialog.message}
-        confirmText={confirmDialog.confirmText}
-        confirmStyle={confirmDialog.confirmStyle}
+        isOpen={confirmDialogState.isOpen}
+        title={confirmDialogState.title}
+        message={confirmDialogState.message}
         onConfirm={() => {
-          confirmDialog.onConfirm()
-          setConfirmDialog(prev => ({ ...prev, isOpen: false }))
+          confirmDialogState.onConfirm()
+          confirmDialogState.onClose()
         }}
-        onCancel={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+        onCancel={confirmDialogState.onClose}
+        confirmText={confirmDialogState.confirmText}
+        confirmStyle={confirmDialogState.confirmStyle}
       />
 
       {/* Toast */}
-      <Toast
-        isVisible={toast.isVisible}
-        message={toast.message}
-        type={toast.type}
-        onClose={() => setToast(prev => ({ ...prev, isVisible: false }))}
-      />
+      {toastState.isVisible && (
+        <Toast
+          message={toastState.message}
+          type={toastState.type}
+          onClose={toastState.onClose}
+          isVisible={true}
+        />
+      )}
     </div>
   )
 }

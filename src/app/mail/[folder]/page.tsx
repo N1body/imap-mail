@@ -35,15 +35,81 @@ export default function FolderPage({
   const searchParams = useSearchParams()
   const searchQuery = searchParams.get('q') || ''
 
-  const { selectedAccount, getServer, isDataLoaded } = useMailContext()
+  const { selectedAccount, getServer, isDataLoaded, showConfirm, showToast } =
+    useMailContext()
 
   const [emails, setEmails] = useState<Email[]>([])
   const [totalEmails, setTotalEmails] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [selectedUids, setSelectedUids] = useState<Set<number>>(new Set())
 
-  const emailsPerPage = 50
+  const emailsPerPage = 25
+
+  // Clear selection when folder or account changes
+  useEffect(() => {
+    setSelectedUids(new Set())
+  }, [folder, selectedAccount?.id])
+
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      const allUids = emails.map(email => email.uid)
+      setSelectedUids(new Set(allUids))
+    } else {
+      setSelectedUids(new Set())
+    }
+  }
+
+  const handleSelectEmail = (uid: number, checked: boolean) => {
+    const newSelected = new Set(selectedUids)
+    if (checked) {
+      newSelected.add(uid)
+    } else {
+      newSelected.delete(uid)
+    }
+    setSelectedUids(newSelected)
+  }
+
+  const handleDelete = (uidsToDelete: number[]) => {
+    if (uidsToDelete.length === 0) return
+
+    showConfirm({
+      title: '删除邮件',
+      message: `确定要删除这 ${uidsToDelete.length} 封邮件吗？`,
+      confirmText: '删除',
+      confirmStyle: 'danger',
+      onConfirm: async () => {
+        try {
+          // Optimistic update
+          setEmails(prev => prev.filter(e => !uidsToDelete.includes(e.uid)))
+          setSelectedUids(
+            new Set(
+              [...selectedUids].filter(uid => !uidsToDelete.includes(uid))
+            )
+          )
+          setTotalEmails(prev => Math.max(0, prev - uidsToDelete.length))
+
+          showToast(`已删除 ${uidsToDelete.length} 封邮件`, 'success')
+
+          await apiCall('delete', {
+            folder,
+            uids: uidsToDelete,
+          })
+        } catch (err) {
+          console.error('Failed to delete emails:', err)
+          showToast('删除失败', 'error')
+          // Revert optimistic update could be complex, for now just show error
+          // Ideally we would fetchEmails(currentPage) to restore state
+          fetchEmails(currentPage)
+        }
+      },
+    })
+  }
+
+  const isAllSelected = emails.length > 0 && selectedUids.size === emails.length
+  const isIndeterminate =
+    selectedUids.size > 0 && selectedUids.size < emails.length
 
   const apiCall = useCallback(
     async (action: string, params: Record<string, unknown> = {}) => {
@@ -230,29 +296,60 @@ export default function FolderPage({
       {/* Toolbar */}
       <div className="h-12 border-b border-gray-200 bg-white flex items-center px-4 gap-2 justify-between">
         <div className="flex items-center gap-2">
-          <input type="checkbox" className="w-4 h-4 rounded border-gray-300" />
-          <button
-            onClick={() =>
-              searchQuery ? searchEmailsFunc(searchQuery, 1) : fetchEmails(1)
-            }
-            className="p-2 hover:bg-gray-100 rounded-full text-gray-600"
-            title="Refresh"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
+          <input
+            type="checkbox"
+            className="w-4 h-4 rounded border-gray-300"
+            checked={isAllSelected}
+            ref={input => {
+              if (input) input.indeterminate = isIndeterminate
+            }}
+            onChange={handleSelectAll}
+          />
+          {selectedUids.size > 0 ? (
+            <button
+              onClick={() => handleDelete(Array.from(selectedUids))}
+              className="p-2 hover:bg-gray-100 rounded-full text-gray-600"
+              title="Delete"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-              />
-            </svg>
-          </button>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
+              </svg>
+            </button>
+          ) : (
+            <button
+              onClick={() =>
+                searchQuery ? searchEmailsFunc(searchQuery, 1) : fetchEmails(1)
+              }
+              className="p-2 hover:bg-gray-100 rounded-full text-gray-600"
+              title="Refresh"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+            </button>
+          )}
         </div>
 
         {/* Pagination */}
@@ -343,16 +440,18 @@ export default function FolderPage({
             <div
               key={email.uid}
               onClick={() => handleEmailClick(email)}
-              className={`gmail-email-row ${
+              className={`gmail-email-row group ${
                 !email.seen ? 'gmail-email-unread' : ''
-              }`}
+              } ${selectedUids.has(email.uid) ? 'bg-blue-50' : ''}`}
             >
               <input
                 type="checkbox"
                 className="w-5 h-5 rounded border-gray-300 mr-4 flex-shrink-0"
+                checked={selectedUids.has(email.uid)}
                 onClick={e => e.stopPropagation()}
+                onChange={e => handleSelectEmail(email.uid, e.target.checked)}
               />
-              <div className="flex-1 flex items-center gap-4 min-w-0">
+              <div className="flex-1 flex items-center gap-4 min-w-0 relative">
                 <span
                   className={`w-[180px] truncate flex-shrink-0 ${
                     !email.seen ? 'font-bold text-[#202124]' : 'text-[#5f6368]'
@@ -374,13 +473,42 @@ export default function FolderPage({
                     — {email.snippet}
                   </span>
                 </div>
-                <span
-                  className={`text-xs whitespace-nowrap flex-shrink-0 ${
-                    !email.seen ? 'font-bold text-[#202124]' : 'text-[#5f6368]'
-                  }`}
-                >
-                  {formatDate(email.date)}
-                </span>
+
+                {/* Date or Delete Button */}
+                <div className="flex-shrink-0 ml-2 w-24 flex justify-end items-center relative">
+                  <span
+                    className={`text-xs whitespace-nowrap transition-opacity duration-150 group-hover:opacity-0 ${
+                      !email.seen
+                        ? 'font-bold text-[#202124]'
+                        : 'text-[#5f6368]'
+                    }`}
+                  >
+                    {formatDate(email.date)}
+                  </span>
+                  <button
+                    className="absolute right-0 p-1.5 hover:bg-gray-200 rounded-full text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                    onClick={e => {
+                      e.stopPropagation()
+                      handleDelete([email.uid])
+                    }}
+                    title="Delete"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-4 w-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                      />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
           ))

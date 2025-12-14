@@ -10,6 +10,14 @@ import {
 } from 'react'
 import { ImapServer, ImapAccount, Folder } from '@/types'
 
+export interface ConfirmDialogOptions {
+  title: string
+  message: string
+  confirmText?: string
+  confirmStyle?: 'danger' | 'primary'
+  onConfirm: () => void
+}
+
 interface MailContextType {
   // Servers
   servers: ImapServer[]
@@ -30,6 +38,20 @@ interface MailContextType {
 
   // Loading state
   isDataLoaded: boolean
+
+  // UI
+  showConfirm: (options: ConfirmDialogOptions) => void
+  showToast: (message: string, type?: 'success' | 'error' | 'info') => void
+  confirmDialogState: ConfirmDialogOptions & {
+    isOpen: boolean
+    onClose: () => void
+  }
+  toastState: {
+    isVisible: boolean
+    message: string
+    type: 'success' | 'error' | 'info'
+    onClose: () => void
+  }
 }
 
 const MailContext = createContext<MailContextType | null>(null)
@@ -42,6 +64,44 @@ export function MailProvider({ children }: { children: ReactNode }) {
   )
   const [folders, setFolders] = useState<Folder[]>([])
   const [isDataLoaded, setIsDataLoaded] = useState(false)
+
+  // UI State
+  const [confirmDialog, setConfirmDialog] = useState<
+    ConfirmDialogOptions & { isOpen: boolean }
+  >({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  })
+
+  const [toast, setToast] = useState<{
+    isVisible: boolean
+    message: string
+    type: 'success' | 'error' | 'info'
+  }>({ isVisible: false, message: '', type: 'success' })
+
+  const showConfirm = useCallback((options: ConfirmDialogOptions) => {
+    setConfirmDialog({ ...options, isOpen: true })
+  }, [])
+
+  const closeConfirm = useCallback(() => {
+    setConfirmDialog(prev => ({ ...prev, isOpen: false }))
+  }, [])
+
+  const showToast = useCallback(
+    (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+      setToast({ isVisible: true, message, type })
+      setTimeout(() => {
+        setToast(prev => ({ ...prev, isVisible: false }))
+      }, 3000)
+    },
+    []
+  )
+
+  const closeToast = useCallback(() => {
+    setToast(prev => ({ ...prev, isVisible: false }))
+  }, [])
 
   // Load data from localStorage
   useEffect(() => {
@@ -169,6 +229,10 @@ export function MailProvider({ children }: { children: ReactNode }) {
         folders,
         setFolders,
         isDataLoaded,
+        showConfirm,
+        showToast,
+        confirmDialogState: { ...confirmDialog, onClose: closeConfirm },
+        toastState: { ...toast, onClose: closeToast },
       }}
     >
       {children}
