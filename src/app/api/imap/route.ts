@@ -5,6 +5,7 @@ import {
   getEmails,
   getEmailByUid,
   deleteEmail,
+  deleteEmails,
   markAsRead,
   searchEmails,
   ImapConfig,
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
         const result = await getEmails(
           imapConfig,
           folder,
-          limit || 50,
+          limit || 25,
           offset || 0
         )
         return NextResponse.json(result)
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest) {
           imapConfig,
           folder,
           query,
-          limit || 50,
+          limit || 25,
           offset || 0
         )
         return NextResponse.json(searchResult)
@@ -104,13 +105,25 @@ export async function POST(request: NextRequest) {
       }
 
       case 'delete': {
-        if (!folder || !uid) {
+        if (!folder) {
           return NextResponse.json(
-            { error: 'Folder and UID are required' },
+            { error: 'Folder is required' },
             { status: 400 }
           )
         }
-        await deleteEmail(imapConfig, folder, parseInt(uid))
+
+        const { uids } = body
+        if (uids && Array.isArray(uids)) {
+          await deleteEmails(imapConfig, folder, uids)
+        } else if (uid) {
+          await deleteEmail(imapConfig, folder, parseInt(uid))
+        } else {
+          return NextResponse.json(
+            { error: 'UID or UIDs are required' },
+            { status: 400 }
+          )
+        }
+
         return NextResponse.json({ success: true })
       }
 

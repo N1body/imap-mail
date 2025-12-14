@@ -1,13 +1,32 @@
 @import 'tailwindcss';
 
 :root {
-  --background: #0f0f23;
-  --foreground: #ededed;
+  /* Gmail Light Theme Colors */
+  --background: #f8fafd; /* Shell background */
+  --content-background: #ffffff; /* Main content area (emails, etc) */
+  --foreground: #1f1f1f;
+  --surface: #ffffff;
+  --surface-highlight: #d3e3fd; /* Active nav item */
+  --primary: #c2e7ff; /* Compose btn container */
+  --primary-foreground: #001d35;
+  --secondary: #d3e3fd;
+  --accent: #0b57d0;
+  --border: #e7eaed;
+  --sidebar-width: 256px;
+  --header-height: 64px;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-content-background: var(--content-background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-highlight: var(--surface-highlight);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-accent: var(--accent);
+  --color-border: var(--border);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -16,108 +35,141 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
+  overflow: hidden;
 }
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(139, 92, 246, 0.5);
-  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: 8px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(139, 92, 246, 0.7);
+  background-color: rgba(0, 0, 0, 0.3);
 }
 
-/* Email content styles */
-.prose {
-  color: #1f2937;
+/* Utilities */
+.gmail-btn {
+  @apply flex items-center gap-3 px-6 py-4 rounded-2xl transition-all font-medium;
+  background-color: var(
+    --primary
+  ); /* Compose uses primary in this context usually, or a specific compose color */
+  color: var(--primary-foreground);
 }
 
-.prose h1,
-.prose h2,
-.prose h3,
-.prose h4,
-.prose h5,
-.prose h6 {
-  color: #111827;
+.gmail-btn:hover {
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3);
+  filter: brightness(0.95);
 }
 
-.prose a {
-  color: #7c3aed;
+.gmail-compose-btn {
+  @apply flex items-center gap-3 px-6 py-4 rounded-2xl transition-all font-medium mb-4;
+  background-color: #c2e7ff;
+  color: #001d35;
+  box-shadow: none;
+  min-width: 140px;
 }
 
-.prose img {
-  max-width: 100%;
-  height: auto;
+.gmail-compose-btn:hover {
+  box-shadow: 0 1px 3px 0 rgba(60, 64, 67, 0.3),
+    0 4px 8px 3px rgba(60, 64, 67, 0.15);
+  background-color: #c2e7ff;
 }
 
-/* Loading animation */
-@keyframes shimmer {
+.gmail-nav-item {
+  @apply flex items-center gap-4 px-6 py-1.5 rounded-r-full cursor-pointer mr-2 text-sm font-medium;
+  color: #444746;
+}
+
+.gmail-nav-item:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  color: #1f1f1f;
+}
+
+.gmail-nav-item.active {
+  background-color: var(--surface-highlight);
+  font-weight: 700;
+  color: #001d35;
+}
+
+.gmail-nav-item.active svg {
+  fill: currentColor;
+  stroke: none;
+}
+
+.gmail-search-bar {
+  @apply flex items-center gap-3 px-4 py-3 rounded-full transition-all w-full max-w-[720px];
+  background-color: #eaeef5;
+  color: #1f1f1f;
+}
+
+.gmail-search-bar:focus-within {
+  background-color: white;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.2),
+    0 2px 6px 2px rgba(60, 64, 67, 0.15);
+}
+.gmail-search-bar input {
+  color: #1f1f1f;
+}
+.gmail-search-bar input::placeholder {
+  color: #444746;
+}
+.gmail-search-bar:focus-within svg {
+  color: #5f6368;
+}
+
+.gmail-email-row {
+  @apply flex items-center gap-4 px-4 py-2 border-b border-[#f2f2f2] cursor-pointer relative text-sm;
+  background-color: transparent; /* Rely on container background unless highlighted */
+  color: #1f1f1f;
+}
+
+.gmail-email-row:hover {
+  box-shadow: inset 1px 0 0 #dadce0, inset -1px 0 0 #dadce0,
+    0 1px 2px 0 rgba(60, 64, 67, 0.3), 0 1px 3px 1px rgba(60, 64, 67, 0.15);
+  z-index: 2;
+  background-color: #ffffff;
+  border-bottom-color: transparent;
+}
+
+.gmail-email-row.unread {
+  background-color: #ffffff;
+  font-weight: 700;
+  color: #202124; /* Gmail black */
+}
+.gmail-email-row.read {
+  background-color: #f2f6fc; /* Gmail read background sometimes varies, usually white or light gray if selected. */
+  /* Actually standard Gmail list is white background, 'read' has normal weight. */
+  font-weight: 400;
+  color: #202124;
+}
+
+/* Loader */
+.loader {
+  border: 4px solid rgba(0, 0, 0, 0.1);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border-left-color: var(--accent);
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
   0% {
-    background-position: -200px 0;
+    transform: rotate(0deg);
   }
   100% {
-    background-position: 200px 0;
+    transform: rotate(360deg);
   }
-}
-
-.animate-shimmer {
-  animation: shimmer 1.5s infinite linear;
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0.05) 25%,
-    rgba(255, 255, 255, 0.1) 50%,
-    rgba(255, 255, 255, 0.05) 75%
-  );
-  background-size: 200px 100%;
-}
-
-/* Glassmorphism effects */
-.glass {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-/* Gradient text */
-.gradient-text {
-  background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* Button hover glow effect */
-button:not(:disabled):hover {
-  transition: all 0.2s ease;
-}
-
-::selection {
-  background: rgba(139, 92, 246, 0.5);
-  color: white;
-}
-
-/* Toast animation */
-@keyframes fade-in-up {
-  from {
-    opacity: 0;
-    transform: translate(-50%, 20px);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, 0);
-  }
-}
-
-.animate-fade-in-up {
-  animation: fade-in-up 0.3s ease-out;
 }
