@@ -46,21 +46,21 @@ export default function ConfirmDialog({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100]">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]">
       <div
         ref={dialogRef}
         tabIndex={-1}
-        className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden border border-white/10 animate-in fade-in zoom-in-95 duration-200"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-6 border-b border-white/10">
+        <div className="p-6 border-b border-gray-100">
           <div className="flex items-center gap-3">
             {confirmStyle === 'danger' && (
-              <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5 text-red-400"
+                  className="h-5 w-5 text-red-600"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -75,10 +75,10 @@ export default function ConfirmDialog({
               </div>
             )}
             {confirmStyle === 'primary' && (
-              <div className="w-10 h-10 rounded-full bg-violet-500/20 flex items-center justify-center flex-shrink-0">
+              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5 text-violet-400"
+                  className="h-5 w-5 text-blue-600"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -92,20 +92,20 @@ export default function ConfirmDialog({
                 </svg>
               </div>
             )}
-            <h2 className="text-lg font-bold text-white">{title}</h2>
+            <h2 className="text-lg font-bold text-gray-900">{title}</h2>
           </div>
         </div>
 
         {/* Content */}
         <div className="p-6">
-          <p className="text-white/70">{message}</p>
+          <p className="text-gray-600">{message}</p>
         </div>
 
         {/* Actions */}
         <div className="p-6 pt-0 flex justify-end gap-3">
           <button
             onClick={onCancel}
-            className="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm font-medium transition-all"
+            className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-all"
           >
             {cancelText}
           </button>
@@ -114,7 +114,7 @@ export default function ConfirmDialog({
             className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all shadow-lg ${
               confirmStyle === 'danger'
                 ? 'bg-red-600 hover:bg-red-500 text-white'
-                : 'bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white'
+                : 'bg-blue-600 hover:bg-blue-500 text-white'
             }`}
           >
             {confirmText}

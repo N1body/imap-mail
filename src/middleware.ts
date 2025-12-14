@@ -4,7 +4,7 @@ import type { NextRequest } from 'next/server'
 const SESSION_NAME = 'imap_admin_session'
 
 // Protected routes
-const protectedPaths = ['/', '/api/imap']
+const protectedPaths = ['/', '/mail', '/api/imap']
 const publicPaths = ['/login', '/api/auth']
 
 export function middleware(request: NextRequest) {
