@@ -35,6 +35,7 @@ interface Email {
   date: string
   seen: boolean
   hasAttachments: boolean
+  snippet: string
 }
 
 interface EmailDetail extends Email {
@@ -1427,7 +1428,7 @@ export default function Home() {
                         </span>
                         <span className="text-gray-500 mx-2">-</span>
                         <span className="text-gray-500">
-                          No snippet available (IMAP fetch limited)
+                          {email.snippet || 'No preview available'}
                         </span>
                       </div>
 

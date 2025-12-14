@@ -17,6 +17,7 @@ export interface EmailSummary {
   date: string
   seen: boolean
   hasAttachments: boolean
+  snippet: string
 }
 
 export interface EmailDetail extends EmailSummary {
@@ -46,6 +47,26 @@ function createImapConnection(config: ImapConfig): Imap {
     authTimeout: 30000,
     connTimeout: 30000,
   })
+}
+
+// Clean sender name by removing quotes (various types)
+function cleanSenderName(name: string): string {
+  return name
+    .replace(/["'""''「」『』«»‹›]/g, '') // Remove all types of quotes
+    .trim()
+}
+
+// Clean snippet by removing image placeholders, URLs, and other noise
+function cleanSnippet(text: string): string {
+  return text
+    .replace(/\[image:[^\]]*\]/gi, '') // Remove [image: xxx] placeholders
+    .replace(/\[cid:[^\]]*\]/gi, '') // Remove [cid: xxx] placeholders
+    .replace(/<https?:\/\/[^>]+>/g, '') // Remove <https://...> URLs
+    .replace(/https?:\/\/\S+/g, '') // Remove plain URLs
+    .replace(/[­]/g, '') // Remove soft hyphens
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .trim()
+    .substring(0, 150)
 }
 
 export function testConnection(config: ImapConfig): Promise<boolean> {
@@ -131,7 +152,7 @@ export function getEmails(
 ): Promise<EmailsResult> {
   return new Promise((resolve, reject) => {
     const imap = createImapConnection(config)
-    const emails: EmailSummary[] = []
+    const emailPromises: Promise<EmailSummary | null>[] = []
 
     imap.once('ready', () => {
       imap.openBox(folder, true, (err, box) => {
@@ -160,60 +181,64 @@ export function getEmails(
         const fetchRange = `${start}:${end}`
         const hasMore = start > 1
 
+        // Fetch full email body for proper parsing with simpleParser
         const fetch = imap.seq.fetch(fetchRange, {
-          bodies: ['HEADER.FIELDS (FROM TO SUBJECT DATE)'],
+          bodies: '',
           struct: true,
         })
 
-        fetch.on('message', (msg, seqno) => {
-          let uid = seqno
-          const header: Buffer[] = []
+        fetch.on('message', msg => {
+          const emailContent: Buffer[] = []
           let attrs: Imap.ImapMessageAttributes | null = null
 
           msg.on('body', stream => {
             stream.on('data', (chunk: Buffer) => {
-              header.push(chunk)
+              emailContent.push(chunk)
             })
           })
 
           msg.once('attributes', a => {
             attrs = a
-            uid = a.uid
           })
 
-          msg.once('end', () => {
-            const headerStr = Buffer.concat(header).toString('utf8')
-            const headerLines = headerStr.split(/\r?\n/)
-            let subject = ''
-            let from = ''
-            let to = ''
-            let date = ''
+          const emailPromise = new Promise<EmailSummary | null>(
+            resolveEmail => {
+              msg.once('end', async () => {
+                try {
+                  if (emailContent.length === 0) {
+                    resolveEmail(null)
+                    return
+                  }
 
-            for (const line of headerLines) {
-              if (line.toLowerCase().startsWith('subject:')) {
-                subject = line.substring(8).trim()
-              } else if (line.toLowerCase().startsWith('from:')) {
-                from = line.substring(5).trim()
-              } else if (line.toLowerCase().startsWith('to:')) {
-                to = line.substring(3).trim()
-              } else if (line.toLowerCase().startsWith('date:')) {
-                date = line.substring(5).trim()
-              }
+                  const rawEmail = Buffer.concat(emailContent)
+                  const parsed = await simpleParser(rawEmail)
+
+                  const flags = attrs?.flags || []
+
+                  const snippet = cleanSnippet(parsed.text || '')
+
+                  resolveEmail({
+                    uid: attrs?.uid || 0,
+                    subject: parsed.subject || '(No Subject)',
+                    from: cleanSenderName(parsed.from?.text || 'Unknown'),
+                    to: parsed.to
+                      ? Array.isArray(parsed.to)
+                        ? parsed.to.map(t => t.text).join(', ')
+                        : parsed.to.text
+                      : 'Unknown',
+                    date:
+                      parsed.date?.toISOString() || new Date().toISOString(),
+                    seen: flags.includes('\\Seen'),
+                    hasAttachments: (parsed.attachments?.length || 0) > 0,
+                    snippet: snippet || '',
+                  })
+                } catch {
+                  resolveEmail(null)
+                }
+              })
             }
-
-            const flags = attrs?.flags || []
-            const struct = attrs?.struct || []
-
-            emails.push({
-              uid,
-              subject: subject || '(No Subject)',
-              from: from || 'Unknown',
-              to: to || 'Unknown',
-              date: date || new Date().toISOString(),
-              seen: flags.includes('\\Seen'),
-              hasAttachments: JSON.stringify(struct).includes('attachment'),
-            })
-          })
+          )
+          emailPromises.push(emailPromise)
         })
 
         fetch.once('error', fetchErr => {
@@ -221,8 +246,11 @@ export function getEmails(
           reject(fetchErr)
         })
 
-        fetch.once('end', () => {
+        fetch.once('end', async () => {
           imap.end()
+          // Wait for all email parsing to complete
+          const results = await Promise.all(emailPromises)
+          const emails = results.filter((e): e is EmailSummary => e !== null)
           // Sort by UID descending (newest first)
           emails.sort((a, b) => b.uid - a.uid)
           resolve({ emails, total: totalMessages, hasMore })
@@ -247,7 +275,6 @@ export function searchEmails(
 ): Promise<EmailsResult> {
   return new Promise((resolve, reject) => {
     const imap = createImapConnection(config)
-    const emails: EmailSummary[] = []
 
     imap.once('ready', () => {
       imap.openBox(folder, true, (err, box) => {
@@ -284,60 +311,65 @@ export function searchEmails(
             return resolve({ emails: [], total: totalResults, hasMore: false })
           }
 
+          const emailPromises: Promise<EmailSummary | null>[] = []
+
           const fetch = imap.fetch(paginatedResults, {
-            bodies: ['HEADER.FIELDS (FROM TO SUBJECT DATE)'],
+            bodies: '',
             struct: true,
           })
 
           fetch.on('message', msg => {
-            let uid = 0
-            const header: Buffer[] = []
+            const emailContent: Buffer[] = []
             let attrs: Imap.ImapMessageAttributes | null = null
 
             msg.on('body', stream => {
               stream.on('data', (chunk: Buffer) => {
-                header.push(chunk)
+                emailContent.push(chunk)
               })
             })
 
             msg.once('attributes', a => {
               attrs = a
-              uid = a.uid
             })
 
-            msg.once('end', () => {
-              const headerStr = Buffer.concat(header).toString('utf8')
-              const headerLines = headerStr.split(/\r?\n/)
-              let subject = ''
-              let from = ''
-              let to = ''
-              let date = ''
+            const emailPromise = new Promise<EmailSummary | null>(
+              resolveEmail => {
+                msg.once('end', async () => {
+                  try {
+                    if (emailContent.length === 0) {
+                      resolveEmail(null)
+                      return
+                    }
 
-              for (const line of headerLines) {
-                if (line.toLowerCase().startsWith('subject:')) {
-                  subject = line.substring(8).trim()
-                } else if (line.toLowerCase().startsWith('from:')) {
-                  from = line.substring(5).trim()
-                } else if (line.toLowerCase().startsWith('to:')) {
-                  to = line.substring(3).trim()
-                } else if (line.toLowerCase().startsWith('date:')) {
-                  date = line.substring(5).trim()
-                }
+                    const rawEmail = Buffer.concat(emailContent)
+                    const parsed = await simpleParser(rawEmail)
+
+                    const flags = attrs?.flags || []
+
+                    const snippet = cleanSnippet(parsed.text || '')
+
+                    resolveEmail({
+                      uid: attrs?.uid || 0,
+                      subject: parsed.subject || '(No Subject)',
+                      from: cleanSenderName(parsed.from?.text || 'Unknown'),
+                      to: parsed.to
+                        ? Array.isArray(parsed.to)
+                          ? parsed.to.map(t => t.text).join(', ')
+                          : parsed.to.text
+                        : 'Unknown',
+                      date:
+                        parsed.date?.toISOString() || new Date().toISOString(),
+                      seen: flags.includes('\\Seen'),
+                      hasAttachments: (parsed.attachments?.length || 0) > 0,
+                      snippet: snippet || '',
+                    })
+                  } catch {
+                    resolveEmail(null)
+                  }
+                })
               }
-
-              const flags = attrs?.flags || []
-              const struct = attrs?.struct || []
-
-              emails.push({
-                uid,
-                subject: subject || '(No Subject)',
-                from: from || 'Unknown',
-                to: to || 'Unknown',
-                date: date || new Date().toISOString(),
-                seen: flags.includes('\\Seen'),
-                hasAttachments: JSON.stringify(struct).includes('attachment'),
-              })
-            })
+            )
+            emailPromises.push(emailPromise)
           })
 
           fetch.once('error', fetchErr => {
@@ -345,8 +377,11 @@ export function searchEmails(
             reject(fetchErr)
           })
 
-          fetch.once('end', () => {
+          fetch.once('end', async () => {
             imap.end()
+            // Wait for all email parsing to complete
+            const results = await Promise.all(emailPromises)
+            const emails = results.filter((e): e is EmailSummary => e !== null)
             // Sort by UID descending (newest first)
             emails.sort((a, b) => b.uid - a.uid)
             resolve({
@@ -438,7 +473,7 @@ export function getEmailByUid(
             const email: EmailDetail = {
               uid,
               subject: parsed.subject || '(No Subject)',
-              from: parsed.from?.text || 'Unknown',
+              from: cleanSenderName(parsed.from?.text || 'Unknown'),
               to: parsed.to
                 ? Array.isArray(parsed.to)
                   ? parsed.to.map(t => t.text).join(', ')
@@ -449,6 +484,7 @@ export function getEmailByUid(
               hasAttachments: (parsed.attachments?.length || 0) > 0,
               html: parsed.html || null,
               text: parsed.text || null,
+              snippet: cleanSnippet(parsed.text || ''),
               attachments: (parsed.attachments || []).map(att => ({
                 filename: att.filename || 'unknown',
                 contentType: att.contentType || 'application/octet-stream',
