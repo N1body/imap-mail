@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import ConfirmDialog from '@/components/ConfirmDialog'
 import Toast from '@/components/Toast'
@@ -77,10 +77,8 @@ export default function Home() {
   const [selectedFolder, setSelectedFolder] = useState<string>('INBOX')
   const [emails, setEmails] = useState<Email[]>([])
   const [totalEmails, setTotalEmails] = useState(0)
-  const [hasMoreEmails, setHasMoreEmails] = useState(false)
-  const [emailOffset, setEmailOffset] = useState(0)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const emailListRef = useRef<HTMLDivElement>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const emailsPerPage = 50
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('')
@@ -214,8 +212,8 @@ export default function Home() {
   useEffect(() => {
     if (selectedAccount && selectedFolder) {
       setSearchQuery('')
-      setEmailOffset(0)
-      fetchEmails(0, true)
+      setCurrentPage(1)
+      fetchEmails(1)
     }
   }, [selectedAccount, selectedFolder])
 
@@ -263,107 +261,84 @@ export default function Home() {
     }
   }
 
-  const fetchEmails = async (offset: number = 0, reset: boolean = false) => {
+  const fetchEmails = async (page: number = 1) => {
     try {
-      if (reset) {
-        setLoading('emails')
-        setSelectedEmail(null)
-      } else {
-        setLoadingMore(true)
-      }
+      setLoading('emails')
+      setSelectedEmail(null)
       setError('')
+      const offset = (page - 1) * emailsPerPage
       const data = await apiCall('emails', {
         folder: selectedFolder,
-        limit: 50,
+        limit: emailsPerPage,
         offset,
       })
       const newEmails = data.emails || []
-      if (reset) {
-        setEmails(newEmails)
-      } else {
-        // Append and deduplicate by uid
-        setEmails(prev => {
-          const existingUids = new Set(prev.map(e => e.uid))
-          const uniqueNew = newEmails.filter(
-            (e: Email) => !existingUids.has(e.uid)
-          )
-          return [...prev, ...uniqueNew]
-        })
-      }
+      setEmails(newEmails)
       setTotalEmails(data.total || 0)
-      setHasMoreEmails(data.hasMore || false)
-      setEmailOffset(offset + newEmails.length)
+      setCurrentPage(page)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch emails')
     } finally {
       setLoading('')
-      setLoadingMore(false)
     }
   }
 
-  const searchEmailsFunc = async (
-    query: string,
-    offset: number = 0,
-    reset: boolean = true
-  ) => {
+  const searchEmailsFunc = async (query: string, page: number = 1) => {
     if (!query.trim()) {
-      setEmailOffset(0)
-      fetchEmails(0, true)
+      setCurrentPage(1)
+      fetchEmails(1)
       return
     }
     try {
-      if (reset) {
-        setLoading('emails')
-        setSelectedEmail(null)
-      } else {
-        setLoadingMore(true)
-      }
+      setLoading('emails')
+      setSelectedEmail(null)
       setError('')
+      const offset = (page - 1) * emailsPerPage
       const data = await apiCall('search', {
         folder: selectedFolder,
         query: query.trim(),
-        limit: 50,
+        limit: emailsPerPage,
         offset,
       })
       const newEmails = data.emails || []
-      if (reset) {
-        setEmails(newEmails)
-      } else {
-        // Append and deduplicate by uid
-        setEmails(prev => {
-          const existingUids = new Set(prev.map(e => e.uid))
-          const uniqueNew = newEmails.filter(
-            (e: Email) => !existingUids.has(e.uid)
-          )
-          return [...prev, ...uniqueNew]
-        })
-      }
+      setEmails(newEmails)
       setTotalEmails(data.total || 0)
-      setHasMoreEmails(data.hasMore || false)
-      setEmailOffset(offset + newEmails.length)
+      setCurrentPage(page)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to search emails')
     } finally {
       setLoading('')
-      setLoadingMore(false)
     }
   }
 
-  const handleScroll = useCallback(() => {
-    const container = emailListRef.current
-    if (!container) return
+  // Calculate pagination values
+  const totalPages = Math.ceil(totalEmails / emailsPerPage)
+  const startIndex = (currentPage - 1) * emailsPerPage + 1
+  const endIndex = Math.min(currentPage * emailsPerPage, totalEmails)
+  const hasPrevPage = currentPage > 1
+  const hasNextPage = currentPage < totalPages
 
-    const { scrollTop, scrollHeight, clientHeight } = container
-    const isNearBottom = scrollHeight - scrollTop - clientHeight < 100
-
-    if (isNearBottom && hasMoreEmails && !loadingMore && loading !== 'emails') {
+  const goToPrevPage = () => {
+    if (hasPrevPage) {
+      const newPage = currentPage - 1
       if (searchQuery) {
-        searchEmailsFunc(searchQuery, emailOffset, false)
+        searchEmailsFunc(searchQuery, newPage)
       } else {
-        fetchEmails(emailOffset, false)
+        fetchEmails(newPage)
       }
     }
-  }, [hasMoreEmails, loadingMore, loading, emailOffset, searchQuery])
+  }
+
+  const goToNextPage = () => {
+    if (hasNextPage) {
+      const newPage = currentPage + 1
+      if (searchQuery) {
+        searchEmailsFunc(searchQuery, newPage)
+      } else {
+        fetchEmails(newPage)
+      }
+    }
+  }
 
   const fetchEmail = async (uid: number) => {
     try {
@@ -670,12 +645,12 @@ export default function Home() {
             </svg>
           </div>
           <span className="text-xl text-[var(--foreground)] opacity-90 tracking-tight">
-            Gmail
+            IMAP Mail
           </span>
         </div>
 
         {/* Compose Button */}
-        <div className="px-4 py-2">
+        <div className="px-3 py-2">
           <button className="gmail-compose-btn">
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -691,14 +666,14 @@ export default function Home() {
                 d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
               />
             </svg>
-            <span>Compose</span>
+            <span>写邮件</span>
           </button>
         </div>
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto mt-2">
           {loading === 'folders' && folders.length === 0 ? (
-            <div className="px-6 py-4 text-xs text-white/50">
+            <div className="px-6 py-4 text-xs text-gray-500">
               Loading folders...
             </div>
           ) : folders.length > 0 ? (
@@ -747,7 +722,7 @@ export default function Home() {
               </div>
             ))
           ) : (
-            <div className="px-6 py-2 text-sm text-white/50">No folders</div>
+            <div className="px-6 py-2 text-sm text-gray-500">No folders</div>
           )}
         </nav>
       </aside>
@@ -755,10 +730,11 @@ export default function Home() {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <header className="h-[var(--header-height)] flex items-center justify-between px-4 gap-4 flex-shrink-0">
+        {/* padding上下8px */}
+        <header className="h-[var(--header-height)] flex items-center justify-between px-4 gap-4 flex-shrink-0 py-2">
           {/* Search Bar */}
           <div className="gmail-search-bar">
-            <button onClick={() => searchEmailsFunc(searchQuery, 0, true)}>
+            <button onClick={() => searchEmailsFunc(searchQuery, 1)}>
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 className="h-5 w-5 text-gray-400"
@@ -776,19 +752,19 @@ export default function Home() {
             </button>
             <input
               type="text"
-              className="flex-1 bg-transparent border-none outline-none text-white placeholder-gray-400"
+              className="flex-1 bg-transparent border-none outline-none text-gray-900 placeholder-gray-500"
               placeholder="Search mail"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               onKeyDown={e =>
-                e.key === 'Enter' && searchEmailsFunc(searchQuery, 0, true)
+                e.key === 'Enter' && searchEmailsFunc(searchQuery, 1)
               }
             />
             {searchQuery && (
               <button
                 onClick={() => {
                   setSearchQuery('')
-                  fetchEmails(0, true)
+                  fetchEmails(1)
                 }}
               >
                 <svg
@@ -805,22 +781,6 @@ export default function Home() {
                 </svg>
               </button>
             )}
-            <button className="text-gray-400 hover:bg-gray-700/50 p-2 rounded-full">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
-                />
-              </svg>
-            </button>
           </div>
 
           {/* Right Profile / Settings */}
@@ -861,15 +821,15 @@ export default function Home() {
               </button>
               {/* Account Dropdown */}
               {showAccountSelector && (
-                <div className="absolute right-0 top-full mt-2 w-72 bg-[#2d2e30] rounded-xl shadow-xl border border-white/10 z-50 overflow-hidden">
-                  <div className="p-4 border-b border-white/10 text-center">
+                <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden">
+                  <div className="p-4 border-b border-gray-100 text-center">
                     <div className="w-16 h-16 rounded-full bg-purple-500 mx-auto flex items-center justify-center text-2xl font-bold mb-2">
                       {selectedAccount?.email.charAt(0).toUpperCase()}
                     </div>
-                    <div className="font-medium text-white">
+                    <div className="font-medium text-gray-900">
                       {selectedAccount?.name}
                     </div>
-                    <div className="text-sm text-gray-400">
+                    <div className="text-sm text-gray-600">
                       {selectedAccount?.email}
                     </div>
                   </div>
@@ -881,16 +841,16 @@ export default function Home() {
                           setSelectedAccount(acc)
                           setShowAccountSelector(false)
                         }}
-                        className="px-4 py-3 hover:bg-white/5 cursor-pointer flex items-center gap-3"
+                        className="px-4 py-3 hover:bg-gray-50 cursor-pointer flex items-center gap-3"
                       >
                         <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-xs">
                           {acc.email.charAt(0).toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm text-white truncate">
+                          <div className="text-sm text-gray-900 truncate">
                             {acc.name}
                           </div>
-                          <div className="text-xs text-gray-400 truncate">
+                          <div className="text-xs text-gray-500 truncate">
                             {acc.email}
                           </div>
                         </div>
@@ -920,19 +880,19 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
-                  <div className="p-2 border-t border-white/10 flex flex-col gap-1">
+                  <div className="p-2 border-t border-gray-100 flex flex-col gap-1">
                     <button
                       onClick={() => {
                         setShowAccountSelector(false)
                         setShowAddAccount(true)
                       }}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-white/5 rounded"
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded"
                     >
                       Add another account
                     </button>
                     <button
                       onClick={handleLogout}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-white/5 rounded"
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded"
                     >
                       Sign out
                     </button>
@@ -954,13 +914,14 @@ export default function Home() {
           )}
 
           {/* View: Email Detail */}
+          {/* View: Email Detail */}
           {selectedEmail ? (
-            <div className="flex-1 flex flex-col h-full bg-[var(--surface)]">
+            <div className="flex-1 flex flex-col h-full bg-white">
               {/* Toolbar */}
-              <div className="h-12 border-b border-[var(--border)] flex items-center px-4 gap-4">
+              <div className="h-12 border-b border-gray-200 flex items-center px-4 gap-2">
                 <button
                   onClick={() => setSelectedEmail(null)}
-                  className="p-2 hover:bg-white/10 rounded-full text-gray-400"
+                  className="p-2 hover:bg-gray-100 rounded-full text-gray-600"
                   title="Back"
                 >
                   <svg
@@ -978,10 +939,53 @@ export default function Home() {
                     />
                   </svg>
                 </button>
-                <div className="h-5 w-px bg-gray-600 mx-2"></div>
+
+                {/* Archive */}
+                <button
+                  className="p-2 hover:bg-gray-100 rounded-full text-gray-600"
+                  title="Archive"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8m-5 5h2.586a1 1 0 01.707.293l2.414 2.414a1 1 0 00.707.293h3.172a1 1 0 00.707-.293l2.414-2.414a1 1 0 01.707-.293H20"
+                    />
+                  </svg>
+                </button>
+
+                {/* Report Spam */}
+                <button
+                  className="p-2 hover:bg-gray-100 rounded-full text-gray-600"
+                  title="Report Spam"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                    />
+                  </svg>
+                </button>
+
+                {/* Delete */}
                 <button
                   onClick={() => deleteEmailHandler(selectedEmail.uid)}
-                  className="p-2 hover:bg-white/10 rounded-full text-gray-400"
+                  className="p-2 hover:bg-gray-100 rounded-full text-gray-600"
                   title="Delete"
                 >
                   <svg
@@ -999,8 +1003,10 @@ export default function Home() {
                     />
                   </svg>
                 </button>
+
+                {/* Mark as Unread */}
                 <button
-                  className="p-2 hover:bg-white/10 rounded-full text-gray-400"
+                  className="p-2 hover:bg-gray-100 rounded-full text-gray-600"
                   title="Mark unread"
                 >
                   <svg
@@ -1021,43 +1027,148 @@ export default function Home() {
               </div>
 
               {/* Content */}
-              <div className="flex-1 overflow-y-auto p-8">
-                <div className="max-w-4xl mx-auto">
-                  <h1 className="text-2xl font-normal text-white mb-6">
-                    {selectedEmail.subject}
-                  </h1>
-                  <div className="flex items-start justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-gray-600 flex items-center justify-center text-lg font-bold">
-                        {selectedEmail.from.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="font-bold text-white text-sm">
-                          {selectedEmail.from.replace(/<.*>/, '').trim()}
-                          <span className="font-normal text-gray-400 ml-2 text-xs">
+              <div className="flex-1 overflow-y-auto px-8 py-6">
+                <div className="max-w-[98%] mx-auto">
+                  {/* Subject Header */}
+                  <div className="flex items-center gap-3 mb-6">
+                    <h1 className="text-[22px] text-[#202124] flex-1 leading-[1.3] break-words">
+                      {selectedEmail.subject || '(No Subject)'}
+                      <span className="ml-3 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-600">
+                        Inbox
+                      </span>
+                    </h1>
+                    <div className="flex items-center gap-2">
+                      <button className="p-2 hover:bg-gray-100 rounded text-gray-500">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className="h-5 w-5"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"
+                          />
+                        </svg>
+                      </button>
+                      <button className="p-2 hover:bg-gray-100 rounded text-gray-500">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className="h-5 w-5"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Sender Info Row */}
+                  <div className="flex items-start gap-4 mb-6 relative group/sender">
+                    {/* Avatar */}
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg text-white font-medium bg-green-700 flex-shrink-0">
+                      {(selectedEmail.from.replace(/<.*>/, '').trim() || '?')
+                        .charAt(0)
+                        .toUpperCase()}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline justify-between">
+                        <div className="flex items-baseline gap-2 overflow-hidden">
+                          <span className="font-bold text-[#202124] text-sm truncate">
+                            {selectedEmail.from.replace(/<.*>/, '').trim() ||
+                              'Unknown'}
+                          </span>
+                          <span className="text-xs text-[#5f6368] truncate">
                             &lt;
                             {selectedEmail.from
                               .match(/<.*>/)?.[0]
                               ?.replace(/[<>]/g, '') || selectedEmail.from}
                             &gt;
                           </span>
+                          <button className="text-xs text-[#5f6368] hover:bg-gray-100 p-0.5 rounded">
+                            to me ▼
+                          </button>
                         </div>
-                        <div className="text-xs text-gray-400">
-                          to {selectedEmail.to}
+                        <div className="flex items-center gap-4 text-xs text-[#5f6368] whitespace-nowrap">
+                          <span>
+                            {new Date(selectedEmail.date).toLocaleString([], {
+                              dateStyle: 'medium',
+                              timeStyle: 'short',
+                            })}
+                          </span>
+                          <div className="flex items-center gap-2 opacity-0 group-hover/sender:opacity-100 transition-opacity">
+                            <button className="p-2 hover:bg-gray-100 rounded-full text-gray-600">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-5 w-5"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
+                                />
+                              </svg>
+                            </button>
+                            <button className="p-2 hover:bg-gray-100 rounded-full text-gray-600">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-5 w-5"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
+                                />
+                              </svg>
+                            </button>
+                            <button className="p-2 hover:bg-gray-100 rounded-full text-gray-600">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-5 w-5"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
+                                />
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="text-xs text-gray-400">
-                      {new Date(selectedEmail.date).toLocaleString()}
                     </div>
                   </div>
 
                   {/* Body */}
-                  <div className="bg-white text-black p-6 rounded shadow-sm min-h-[200px]">
+                  <div className="text-[#202124] text-sm overflow-hidden min-h-[200px] mb-8">
                     {selectedEmail.html ? (
                       <div
                         dangerouslySetInnerHTML={{ __html: selectedEmail.html }}
-                        className="prose max-w-none"
+                        className="prose max-w-none prose-sm"
+                        // Add specific styles to reset prose defaults that might conflict
                       />
                     ) : (
                       <div className="whitespace-pre-wrap font-mono text-sm">
@@ -1069,35 +1180,114 @@ export default function Home() {
                   {/* Attachments */}
                   {selectedEmail.attachments &&
                     selectedEmail.attachments.length > 0 && (
-                      <div className="mt-8 border-t border-white/10 pt-4">
-                        <h4 className="text-sm font-bold text-gray-400 mb-3">
+                      <div className="mt-8 border-t border-gray-100 pt-4">
+                        <h4 className="text-sm font-medium text-gray-500 mb-3">
                           {selectedEmail.attachments.length} Attachments
                         </h4>
                         <div className="flex flex-wrap gap-4">
                           {selectedEmail.attachments.map((att, i) => (
                             <div
                               key={i}
-                              className="flex items-center gap-3 p-3 bg-[#444746] rounded-lg border border-white/10 w-48 hover:bg-[#535658] cursor-pointer"
+                              className="group relative flex items-center gap-3 p-3 bg-[#f5f5f5] rounded-md border border-transparent hover:border-gray-300 hover:shadow-sm w-[200px] cursor-pointer transition-all overflow-hidden"
                             >
-                              <div className="w-8 h-8 bg-red-500 rounded flex items-center justify-center text-xs font-bold text-white">
-                                FILE
+                              <div className="w-10 h-10 bg-red-100 rounded flex items-center justify-center text-xs font-bold text-red-600 flex-shrink-0">
+                                PDF
                               </div>
-                              <div className="flex-1 min-w-0">
+                              <div className="flex-1 min-w-0 overflow-hidden">
                                 <div
-                                  className="text-sm font-medium text-white truncate"
+                                  className="text-sm font-medium text-[#202124] truncate"
                                   title={att.filename}
                                 >
                                   {att.filename}
                                 </div>
-                                <div className="text-xs text-gray-400">
+                                <div className="text-xs text-gray-500">
                                   {formatFileSize(att.size)}
                                 </div>
+                              </div>
+                              {/* Hover Overlay */}
+                              <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                <button
+                                  className="p-1.5 bg-white rounded-full shadow hover:bg-gray-50 text-gray-600"
+                                  title="Download"
+                                >
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    className="h-5 w-5"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                                    />
+                                  </svg>
+                                </button>
+                                <button
+                                  className="p-1.5 bg-white rounded-full shadow hover:bg-gray-50 text-gray-600"
+                                  title="Add to Drive"
+                                >
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    className="h-5 w-5"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"
+                                    />
+                                  </svg>
+                                </button>
                               </div>
                             </div>
                           ))}
                         </div>
                       </div>
                     )}
+
+                  {/* Bottom Action Buttons */}
+                  <div className="mt-8 flex gap-3">
+                    <button className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-full text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-800 transition-colors">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-4 w-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
+                        />
+                      </svg>
+                      Reply
+                    </button>
+                    <button className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-full text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-800 transition-colors">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-4 w-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M14 5l7 7m0 0l-7 7m7-7H3"
+                        />
+                      </svg>
+                      Forward
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1107,7 +1297,10 @@ export default function Home() {
               {/* List Toolbar */}
               <div className="h-10 flex items-center px-4 border-b border-[var(--border)] gap-4 text-gray-400">
                 <div className="w-5 h-5 border-2 border-gray-500 rounded-sm"></div>
-                <button onClick={() => fetchEmails(0, true)} title="Refresh">
+                <button
+                  onClick={() => fetchEmails(currentPage)}
+                  title="Refresh"
+                >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     className={`h-5 w-5 ${
@@ -1126,17 +1319,20 @@ export default function Home() {
                   </svg>
                 </button>
                 <div className="flex-1"></div>
-                <span className="text-xs">
-                  {emails.length} of {totalEmails}
+                <span className="text-xs text-[#5f6368]">
+                  {totalEmails > 0 ? `${startIndex}-${endIndex}` : '0'} of{' '}
+                  {totalEmails}
                 </span>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                   <button
-                    disabled={emailOffset === 0}
-                    className="p-1 hover:text-white disabled:opacity-30"
+                    disabled={!hasPrevPage}
+                    onClick={goToPrevPage}
+                    className="p-1 hover:bg-gray-100 rounded disabled:opacity-30 disabled:hover:bg-transparent"
+                    title="Previous page"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
-                      className="h-4 w-4"
+                      className="h-5 w-5 text-[#5f6368]"
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
@@ -1150,13 +1346,14 @@ export default function Home() {
                     </svg>
                   </button>
                   <button
-                    disabled={!hasMoreEmails}
-                    onClick={() => fetchEmails(emailOffset, false)}
-                    className="p-1 hover:text-white disabled:opacity-30"
+                    disabled={!hasNextPage}
+                    onClick={goToNextPage}
+                    className="p-1 hover:bg-gray-100 rounded disabled:opacity-30 disabled:hover:bg-transparent"
+                    title="Next page"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
-                      className="h-4 w-4"
+                      className="h-5 w-5 text-[#5f6368]"
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
@@ -1173,11 +1370,7 @@ export default function Home() {
               </div>
 
               {/* List Content */}
-              <div
-                className="flex-1 overflow-y-auto"
-                ref={emailListRef}
-                onScroll={handleScroll}
-              >
+              <div className="flex-1 overflow-y-auto">
                 {loading === 'emails' && emails.length === 0 ? (
                   <div className="flex justify-center items-center h-full">
                     <div className="loader"></div>
@@ -1196,7 +1389,7 @@ export default function Home() {
                       }`}
                     >
                       {/* Drag handle / Checkbox */}
-                      <div className="flex items-center gap-3 text-gray-500 pl-2">
+                      <div className="flex items-center gap-3 text-gray-400 pl-2">
                         <div className="w-5 h-5 border-2 border-gray-600 rounded-sm hover:border-white cursor-pointer"></div>
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
@@ -1214,12 +1407,22 @@ export default function Home() {
                         </svg>
                       </div>
 
-                      <div className="min-w-[160px] max-w-[200px] truncate font-bold text-white pr-4">
+                      <div
+                        className={`min-w-[160px] max-w-[200px] truncate pr-4 ${
+                          email.seen
+                            ? 'font-normal text-[#202124]'
+                            : 'font-bold text-[#202124]'
+                        }`}
+                      >
                         {email.from.replace(/<.*>/, '').trim() || 'Unknown'}
                       </div>
 
-                      <div className="flex-1 truncate text-gray-300">
-                        <span className="text-white font-medium">
+                      <div className="flex-1 truncate text-gray-500">
+                        <span
+                          className={`${
+                            email.seen ? 'font-normal' : 'font-bold'
+                          } text-[#202124]`}
+                        >
                           {email.subject || '(No Subject)'}
                         </span>
                         <span className="text-gray-500 mx-2">-</span>
@@ -1228,62 +1431,60 @@ export default function Home() {
                         </span>
                       </div>
 
-                      <div className="text-xs font-bold text-gray-400 w-24 text-right flex-shrink-0 group-hover:hidden">
-                        {formatDate(email.date)}
-                      </div>
+                      {/* Date & Hover Actions Container - Fixed size to prevent jitter */}
+                      <div className="w-24 flex-shrink-0 relative h-8 flex items-center justify-end">
+                        <div className="text-xs font-bold text-gray-400 text-right group-hover:opacity-0 transition-opacity">
+                          {formatDate(email.date)}
+                        </div>
 
-                      {/* Hover Actions */}
-                      <div className="w-24 hidden group-hover:flex items-center justify-end gap-2 pr-2">
-                        <button
-                          onClick={e => {
-                            e.stopPropagation()
-                            deleteEmailHandler(email.uid)
-                          }}
-                          className="p-2 hover:bg-gray-600 rounded-full text-gray-300"
-                          title="Delete"
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="h-4 w-4"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
+                        {/* Hover Actions - Absolute positioned to avoid layout shift */}
+                        <div className="absolute inset-0 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={e => {
+                              e.stopPropagation()
+                              deleteEmailHandler(email.uid)
+                            }}
+                            className="p-2 hover:bg-gray-600 rounded-full text-gray-300"
+                            title="Delete"
                           >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                            />
-                          </svg>
-                        </button>
-                        <button
-                          className="p-2 hover:bg-gray-600 rounded-full text-gray-300"
-                          title="Archive"
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="h-4 w-4"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              className="h-4 w-4"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                              />
+                            </svg>
+                          </button>
+                          <button
+                            className="p-2 hover:bg-gray-600 rounded-full text-gray-300"
+                            title="Archive"
                           >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8m-5 5h2.586a1 1 0 01.707.293l2.414 2.414a1 1 0 00.707.293h3.172a1 1 0 00.707-.293l2.414-2.414a1 1 0 01.707-.293H20"
-                            />
-                          </svg>
-                        </button>
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              className="h-4 w-4"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8m-5 5h2.586a1 1 0 01.707.293l2.414 2.414a1 1 0 00.707.293h3.172a1 1 0 00.707-.293l2.414-2.414a1 1 0 01.707-.293H20"
+                              />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))
-                )}
-                {loadingMore && (
-                  <div className="p-4 text-center">
-                    <div className="loader mx-auto w-6 h-6 border-2"></div>
-                  </div>
                 )}
               </div>
             </div>
@@ -1293,16 +1494,16 @@ export default function Home() {
 
       {/* Modals */}
       {showAddAccount && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100]">
-          <div className="bg-[#2d2e30] rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden border border-white/10">
-            <div className="p-6 border-b border-white/10">
-              <h2 className="text-xl font-normal text-white">Add Account</h2>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[100]">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden border border-gray-200">
+            <div className="p-6 border-b border-gray-100">
+              <h2 className="text-xl font-normal text-gray-900">Add Account</h2>
             </div>
             <div className="p-6 space-y-4">
               <input
                 type="text"
                 placeholder="Email"
-                className="w-full px-4 py-3 bg-[#1f1f1f] border border-gray-600 rounded text-white focus:border-blue-500 outline-none"
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded text-gray-900 focus:border-blue-500 outline-none"
                 value={newAccount.email}
                 onChange={e =>
                   setNewAccount({ ...newAccount, email: e.target.value })
@@ -1311,14 +1512,14 @@ export default function Home() {
               <input
                 type="password"
                 placeholder="Password"
-                className="w-full px-4 py-3 bg-[#1f1f1f] border border-gray-600 rounded text-white focus:border-blue-500 outline-none"
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded text-gray-900 focus:border-blue-500 outline-none"
                 value={newAccount.password}
                 onChange={e =>
                   setNewAccount({ ...newAccount, password: e.target.value })
                 }
               />
               <select
-                className="w-full px-4 py-3 bg-[#1f1f1f] border border-gray-600 rounded text-white outline-none"
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded text-gray-900 outline-none"
                 value={newAccount.serverId}
                 onChange={e =>
                   setNewAccount({ ...newAccount, serverId: e.target.value })
@@ -1357,7 +1558,7 @@ export default function Home() {
                   setShowAccountSelector(false)
                   setShowBulkImport(true)
                 }}
-                className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-white/5 rounded"
+                className="w-full text-left px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded"
               >
                 Bulk Import
               </button>
@@ -1383,13 +1584,13 @@ export default function Home() {
                 disabled={
                   testingConnection || !newAccount.email || !newAccount.password
                 }
-                className="px-4 py-2 text-white hover:bg-white/10 rounded disabled:opacity-50"
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded disabled:opacity-50"
               >
                 {testingConnection ? 'Testing...' : 'Test Connection'}
               </button>
               <button
                 onClick={() => setShowAddAccount(false)}
-                className="px-4 py-2 text-white hover:bg-white/10 rounded"
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
               >
                 Cancel
               </button>
@@ -1405,15 +1606,15 @@ export default function Home() {
       )}
 
       {showServerManager && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100]">
-          <div className="bg-[#2d2e30] rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden border border-white/10">
-            <div className="p-6 border-b border-white/10 flex justify-between items-center">
-              <h2 className="text-xl font-normal text-white">
-                Server Management
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[100]">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden border border-gray-200">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+              <h2 className="text-xl font-normal text-gray-900">
+                IMAP 服务器管理
               </h2>
               <button
                 onClick={() => setShowServerManager(false)}
-                className="text-gray-400 hover:text-white"
+                className="text-gray-400 hover:text-gray-600"
               >
                 ✕
               </button>
@@ -1423,10 +1624,10 @@ export default function Home() {
                 {servers.map(server => (
                   <div
                     key={server.id}
-                    className="flex items-center justify-between p-3 bg-[#1f1f1f] rounded border border-white/10"
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded border border-gray-200"
                   >
                     <div>
-                      <div className="font-medium text-white">
+                      <div className="font-medium text-gray-900">
                         {server.name}
                       </div>
                       <div className="text-sm text-gray-500">
@@ -1442,8 +1643,8 @@ export default function Home() {
                   </div>
                 ))}
               </div>
-              <div className="p-4 bg-[#1f1f1f] rounded border border-white/10">
-                <h3 className="text-sm font-bold text-gray-400 mb-3">
+              <div className="p-4 bg-gray-50 rounded border border-gray-200">
+                <h3 className="text-sm font-bold text-gray-500 mb-3">
                   Add New Server
                 </h3>
                 <div className="grid grid-cols-2 gap-3 mb-3">
@@ -1454,7 +1655,7 @@ export default function Home() {
                     onChange={e =>
                       setNewServer({ ...newServer, name: e.target.value })
                     }
-                    className="px-3 py-2 bg-[#2d2e30] rounded text-white border border-gray-600"
+                    className="px-3 py-2 bg-white rounded text-gray-900 border border-gray-300"
                   />
                   <input
                     type="text"
@@ -1463,7 +1664,7 @@ export default function Home() {
                     onChange={e =>
                       setNewServer({ ...newServer, host: e.target.value })
                     }
-                    className="px-3 py-2 bg-[#2d2e30] rounded text-white border border-gray-600"
+                    className="px-3 py-2 bg-white rounded text-gray-900 border border-gray-300"
                   />
                   <input
                     type="text"
@@ -1472,9 +1673,9 @@ export default function Home() {
                     onChange={e =>
                       setNewServer({ ...newServer, port: e.target.value })
                     }
-                    className="px-3 py-2 bg-[#2d2e30] rounded text-white border border-gray-600"
+                    className="px-3 py-2 bg-white rounded text-gray-900 border border-gray-300"
                   />
-                  <label className="flex items-center gap-2 text-white">
+                  <label className="flex items-center gap-2 text-gray-700">
                     <input
                       type="checkbox"
                       checked={newServer.tls}
@@ -1499,15 +1700,15 @@ export default function Home() {
 
       {/* Bulk Import Modal */}
       {showBulkImport && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100]">
-          <div className="bg-[#2d2e30] rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden border border-white/10">
-            <div className="p-6 border-b border-white/10 flex justify-between items-center">
-              <h2 className="text-xl font-normal text-white">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[100]">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden border border-gray-200">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+              <h2 className="text-xl font-normal text-gray-900">
                 Bulk Import Accounts
               </h2>
               <button
                 onClick={() => setShowBulkImport(false)}
-                className="text-gray-400 hover:text-white"
+                className="text-gray-400 hover:text-gray-600"
               >
                 ✕
               </button>
@@ -1517,7 +1718,7 @@ export default function Home() {
               {!importProgress ? (
                 <>
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                    <label className="block text-sm font-medium text-gray-500 mb-2">
                       Format: email----password (one per line)
                     </label>
                     <textarea
@@ -1526,18 +1727,18 @@ export default function Home() {
                       placeholder={
                         'user1@example.com----pass1\nuser2@example.com----pass2'
                       }
-                      className="w-full h-48 px-4 py-3 bg-[#1f1f1f] border border-gray-600 rounded text-white font-mono text-sm focus:border-blue-500 outline-none"
+                      className="w-full h-48 px-4 py-3 bg-gray-50 border border-gray-300 rounded text-gray-900 font-mono text-sm focus:border-blue-500 outline-none"
                     />
                   </div>
 
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                    <label className="block text-sm font-medium text-gray-500 mb-2">
                       Assign to Server
                     </label>
                     <select
                       value={bulkServerId}
                       onChange={e => setBulkServerId(e.target.value)}
-                      className="w-full px-4 py-3 bg-[#1f1f1f] border border-gray-600 rounded text-white outline-none"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded text-gray-900 outline-none"
                     >
                       {servers.map(server => (
                         <option key={server.id} value={server.id}>
@@ -1550,7 +1751,7 @@ export default function Home() {
                   <div className="flex justify-end gap-3">
                     <button
                       onClick={() => setShowBulkImport(false)}
-                      className="px-4 py-2 text-white hover:bg-white/10 rounded"
+                      className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
                     >
                       Cancel
                     </button>
@@ -1566,7 +1767,7 @@ export default function Home() {
               ) : (
                 <div className="py-8 text-center">
                   <div className="loader mx-auto w-10 h-10 border-4 mb-4"></div>
-                  <h3 className="text-lg font-medium text-white mb-2">
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
                     {importProgress.status}
                   </h3>
                   <div className="w-full bg-gray-700 rounded-full h-2.5 mb-2 max-w-md mx-auto">
@@ -1579,7 +1780,7 @@ export default function Home() {
                       }}
                     ></div>
                   </div>
-                  <p className="text-sm text-gray-400">
+                  <p className="text-sm text-gray-500">
                     {importProgress.current} / {importProgress.total}
                   </p>
                 </div>
