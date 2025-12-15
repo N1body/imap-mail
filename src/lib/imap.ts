@@ -22,6 +22,7 @@ export interface ImapConfig {
   host: string
   port: number
   tls: boolean
+  xoauth2?: string // XOAUTH2 authentication string for OAuth2
 }
 
 export interface EmailSummary {
@@ -50,18 +51,29 @@ export interface FolderInfo {
   path: string
   messageCount: number
 }
+// Extended IMAP config that includes xoauth2 (not in @types/node-imap)
+interface ImapXOAuth2Config extends Imap.Config {
+  xoauth2?: string
+}
 
 function createImapConnection(config: ImapConfig): Imap {
-  return new Imap({
+  const imapConfig: ImapXOAuth2Config = {
     user: config.user,
-    password: config.password,
+    password: config.xoauth2 ? '' : config.password, // Empty password for OAuth2
     host: config.host,
     port: config.port,
     tls: config.tls,
     tlsOptions: { rejectUnauthorized: false },
     authTimeout: 30000,
     connTimeout: 30000,
-  })
+  }
+
+  // Add xoauth2 if provided
+  if (config.xoauth2) {
+    imapConfig.xoauth2 = config.xoauth2
+  }
+
+  return new Imap(imapConfig)
 }
 
 // Clean sender name by removing quotes (various types)

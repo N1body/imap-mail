@@ -10,31 +10,70 @@ import {
   searchEmails,
   ImapConfig,
 } from '@/lib/imap'
+import { getAccessToken, generateXOAuth2String } from '@/lib/oauth2'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { action, config, folder, uid, limit, offset, query } = body
 
-    if (
-      !config ||
-      !config.user ||
-      !config.password ||
-      !config.host ||
-      !config.port
-    ) {
+    // Validate required fields
+    const isOAuth2 = config?.authType === 'oauth2'
+
+    if (!config || !config.user || !config.host || !config.port) {
       return NextResponse.json(
         { error: 'Missing IMAP configuration' },
         { status: 400 }
       )
     }
 
+    // For password auth, require password; for OAuth2, require refreshToken and clientId
+    if (!isOAuth2 && !config.password) {
+      return NextResponse.json(
+        { error: 'Missing password for password authentication' },
+        { status: 400 }
+      )
+    }
+
+    if (isOAuth2 && (!config.refreshToken || !config.clientId)) {
+      return NextResponse.json(
+        { error: 'Missing refreshToken or clientId for OAuth2 authentication' },
+        { status: 400 }
+      )
+    }
+
+    // Build ImapConfig
+    let xoauth2: string | undefined
+
+    // If OAuth2, get access token and generate XOAUTH2 string
+    if (isOAuth2) {
+      try {
+        const accessToken = await getAccessToken(
+          config.refreshToken,
+          config.clientId
+        )
+        xoauth2 = generateXOAuth2String(config.user, accessToken)
+      } catch (tokenError) {
+        console.error('OAuth2 token error:', tokenError)
+        return NextResponse.json(
+          {
+            error:
+              tokenError instanceof Error
+                ? tokenError.message
+                : 'OAuth2 token refresh failed',
+          },
+          { status: 401 }
+        )
+      }
+    }
+
     const imapConfig: ImapConfig = {
       user: config.user,
-      password: config.password,
+      password: config.password || '',
       host: config.host,
       port: parseInt(config.port),
       tls: config.tls !== false,
+      xoauth2,
     }
 
     switch (action) {

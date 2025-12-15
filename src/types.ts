@@ -4,6 +4,8 @@ export interface ImapServer {
   host: string
   port: number
   tls: boolean
+  authType: 'password' | 'oauth2' // Authentication type
+  clientId?: string // OAuth2: Azure App Client ID
 }
 
 export interface ImapAccount {
@@ -12,6 +14,7 @@ export interface ImapAccount {
   email: string
   serverId: string
   password: string
+  refreshToken?: string // OAuth2: Microsoft Refresh Token
 }
 
 export interface Folder {

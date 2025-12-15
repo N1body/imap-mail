@@ -48,6 +48,13 @@ function MailLayoutContent({ children }: { children: React.ReactNode }) {
   const [newServerHost, setNewServerHost] = useState('')
   const [newServerPort, setNewServerPort] = useState(993)
   const [newServerTls, setNewServerTls] = useState(true)
+  const [newServerAuthType, setNewServerAuthType] = useState<
+    'password' | 'oauth2'
+  >('password')
+  const [newServerClientId, setNewServerClientId] = useState('')
+
+  // Form states for adding account (OAuth2)
+  const [newAccountRefreshToken, setNewAccountRefreshToken] = useState('')
 
   // Bulk import state
   const [bulkImportText, setBulkImportText] = useState('')
@@ -80,6 +87,9 @@ function MailLayoutContent({ children }: { children: React.ReactNode }) {
             host: server.host,
             port: server.port,
             tls: server.tls,
+            authType: server.authType || 'password',
+            clientId: server.clientId,
+            refreshToken: selectedAccount.refreshToken,
           },
           ...params,
         }),
@@ -139,7 +149,7 @@ function MailLayoutContent({ children }: { children: React.ReactNode }) {
   }
 
   const handleTestConnection = async () => {
-    if (!newAccountEmail || !newAccountPassword || !newAccountServerId) {
+    if (!newAccountEmail || !newAccountServerId) {
       setTestConnectionResult({
         success: false,
         message: '请填写完整的账号信息',
@@ -152,6 +162,24 @@ function MailLayoutContent({ children }: { children: React.ReactNode }) {
       setTestConnectionResult({
         success: false,
         message: '请选择服务器',
+      })
+      return
+    }
+
+    const isOAuth2 = server.authType === 'oauth2'
+
+    // Validate based on auth type
+    if (isOAuth2 && !newAccountRefreshToken) {
+      setTestConnectionResult({
+        success: false,
+        message: '请填写 Refresh Token',
+      })
+      return
+    }
+    if (!isOAuth2 && !newAccountPassword) {
+      setTestConnectionResult({
+        success: false,
+        message: '请填写密码',
       })
       return
     }
@@ -171,6 +199,9 @@ function MailLayoutContent({ children }: { children: React.ReactNode }) {
             host: server.host,
             port: server.port,
             tls: server.tls,
+            authType: server.authType || 'password',
+            clientId: server.clientId,
+            refreshToken: newAccountRefreshToken,
           },
         }),
       })
@@ -581,6 +612,30 @@ function MailLayoutContent({ children }: { children: React.ReactNode }) {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                  IMAP 服务器
+                </label>
+                <select
+                  value={newAccountServerId}
+                  onChange={e => {
+                    setNewAccountServerId(e.target.value)
+                    // Reset password/token when server changes
+                    setNewAccountPassword('')
+                    setNewAccountRefreshToken('')
+                    setTestConnectionResult(null)
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                >
+                  <option value="">选择服务器...</option>
+                  {servers.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.host}){' '}
+                      {s.authType === 'oauth2' ? '🔐 OAuth2' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   邮箱地址
                 </label>
                 <input
@@ -591,35 +646,50 @@ function MailLayoutContent({ children }: { children: React.ReactNode }) {
                   placeholder="user@example.com"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  密码/应用专用密码
-                </label>
-                <input
-                  type="password"
-                  value={newAccountPassword}
-                  onChange={e => setNewAccountPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
-                  placeholder="••••••••"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  IMAP 服务器
-                </label>
-                <select
-                  value={newAccountServerId}
-                  onChange={e => setNewAccountServerId(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
-                >
-                  <option value="">选择服务器...</option>
-                  {servers.map(s => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.host})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* Show password or refresh token based on server auth type */}
+              {(() => {
+                const selectedServer = servers.find(
+                  s => s.id === newAccountServerId
+                )
+                const isOAuth2 = selectedServer?.authType === 'oauth2'
+
+                if (isOAuth2) {
+                  return (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Refresh Token
+                      </label>
+                      <textarea
+                        value={newAccountRefreshToken}
+                        onChange={e =>
+                          setNewAccountRefreshToken(e.target.value)
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 text-sm font-mono"
+                        placeholder="从 Microsoft Azure 获取的 Refresh Token..."
+                        rows={3}
+                      />
+                      <p className="mt-1 text-xs text-gray-500">
+                        OAuth2 账户需要提供 Refresh Token 而非密码
+                      </p>
+                    </div>
+                  )
+                }
+
+                return (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      密码/应用专用密码
+                    </label>
+                    <input
+                      type="password"
+                      value={newAccountPassword}
+                      onChange={e => setNewAccountPassword(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                      placeholder="••••••••"
+                    />
+                  </div>
+                )
+              })()}
             </div>
 
             {/* Test Connection Result */}
@@ -670,6 +740,10 @@ function MailLayoutContent({ children }: { children: React.ReactNode }) {
                 onClick={() => {
                   setShowAddAccountModal(false)
                   setTestConnectionResult(null)
+                  setNewAccountEmail('')
+                  setNewAccountPassword('')
+                  setNewAccountRefreshToken('')
+                  setNewAccountServerId('')
                 }}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
               >
@@ -680,8 +754,11 @@ function MailLayoutContent({ children }: { children: React.ReactNode }) {
                 disabled={
                   testingConnection ||
                   !newAccountEmail ||
-                  !newAccountPassword ||
-                  !newAccountServerId
+                  !newAccountServerId ||
+                  (servers.find(s => s.id === newAccountServerId)?.authType ===
+                  'oauth2'
+                    ? !newAccountRefreshToken
+                    : !newAccountPassword)
                 }
                 className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
@@ -714,27 +791,44 @@ function MailLayoutContent({ children }: { children: React.ReactNode }) {
               </button>
               <button
                 onClick={() => {
-                  if (
-                    newAccountEmail &&
-                    newAccountPassword &&
-                    newAccountServerId
-                  ) {
+                  const selectedServer = servers.find(
+                    s => s.id === newAccountServerId
+                  )
+                  const isOAuth2 = selectedServer?.authType === 'oauth2'
+                  const hasCredential = isOAuth2
+                    ? newAccountRefreshToken
+                    : newAccountPassword
+
+                  if (newAccountEmail && hasCredential && newAccountServerId) {
                     addAccount({
                       email: newAccountEmail,
                       password: newAccountPassword,
                       serverId: newAccountServerId,
                       name: newAccountEmail.split('@')[0],
+                      refreshToken: isOAuth2
+                        ? newAccountRefreshToken
+                        : undefined,
                     })
                     setNewAccountEmail('')
                     setNewAccountPassword('')
+                    setNewAccountRefreshToken('')
                     setNewAccountServerId('')
                     setTestConnectionResult(null)
                     setShowAddAccountModal(false)
                   }
                 }}
-                disabled={
-                  !newAccountEmail || !newAccountPassword || !newAccountServerId
-                }
+                disabled={(() => {
+                  const selectedServer = servers.find(
+                    s => s.id === newAccountServerId
+                  )
+                  const isOAuth2 = selectedServer?.authType === 'oauth2'
+                  const hasCredential = isOAuth2
+                    ? newAccountRefreshToken
+                    : newAccountPassword
+                  return (
+                    !newAccountEmail || !hasCredential || !newAccountServerId
+                  )
+                })()}
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 添加
@@ -777,16 +871,30 @@ function MailLayoutContent({ children }: { children: React.ReactNode }) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  账号列表（每行一个，格式：邮箱----密码）
+                  账号列表（每行一个，格式：邮箱----
+                  {servers.find(s => s.id === bulkImportServerId)?.authType ===
+                  'oauth2'
+                    ? 'RefreshToken'
+                    : '密码'}
+                  ）
                 </label>
                 <textarea
                   value={bulkImportText}
                   onChange={e => setBulkImportText(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent h-48 font-mono text-sm text-gray-900"
                   placeholder={
-                    'user1@example.com----password1\nuser2@example.com----password2'
+                    servers.find(s => s.id === bulkImportServerId)?.authType ===
+                    'oauth2'
+                      ? 'user1@outlook.com----refreshToken1\nuser2@outlook.com----refreshToken2'
+                      : 'user1@example.com----password1\nuser2@example.com----password2'
                   }
                 />
+                {servers.find(s => s.id === bulkImportServerId)?.authType ===
+                  'oauth2' && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    OAuth2 服务器需要填写 Refresh Token 而非密码
+                  </p>
+                )}
               </div>
             </div>
             <div className="flex gap-3 mt-6">
@@ -799,6 +907,11 @@ function MailLayoutContent({ children }: { children: React.ReactNode }) {
               <button
                 onClick={() => {
                   if (bulkImportText && bulkImportServerId) {
+                    const selectedServer = servers.find(
+                      s => s.id === bulkImportServerId
+                    )
+                    const isOAuth2 = selectedServer?.authType === 'oauth2'
+
                     const lines = bulkImportText
                       .split('\n')
                       .filter(line => line.trim())
@@ -807,33 +920,34 @@ function MailLayoutContent({ children }: { children: React.ReactNode }) {
                       const trimmedLine = line.trim()
                       // Support multiple separators: colon, tab, double dash, space (last resort)
                       let email = ''
-                      let password = ''
+                      let credential = ''
 
                       if (trimmedLine.includes(':')) {
                         const parts = trimmedLine.split(':')
                         email = parts[0].trim()
-                        password = parts.slice(1).join(':').trim() // Handle passwords with colons
+                        credential = parts.slice(1).join(':').trim() // Handle passwords with colons
                       } else if (trimmedLine.includes('\t')) {
                         const parts = trimmedLine.split('\t')
                         email = parts[0].trim()
-                        password = parts.slice(1).join('\t').trim()
+                        credential = parts.slice(1).join('\t').trim()
                       } else if (trimmedLine.includes('----')) {
                         const parts = trimmedLine.split('----')
                         email = parts[0].trim()
-                        password = parts.slice(1).join('----').trim()
+                        credential = parts.slice(1).join('----').trim()
                       } else if (trimmedLine.includes(' ')) {
                         // Space separator - assume first part is email
                         const parts = trimmedLine.split(/\s+/)
                         email = parts[0].trim()
-                        password = parts.slice(1).join(' ').trim()
+                        credential = parts.slice(1).join(' ').trim()
                       }
 
-                      if (email && password && email.includes('@')) {
+                      if (email && credential && email.includes('@')) {
                         addAccount({
                           email,
-                          password,
+                          password: isOAuth2 ? '' : credential,
                           serverId: bulkImportServerId,
                           name: email.split('@')[0],
+                          refreshToken: isOAuth2 ? credential : undefined,
                         })
                         importedCount++
                       }
@@ -887,8 +1001,13 @@ function MailLayoutContent({ children }: { children: React.ReactNode }) {
                       className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg"
                     >
                       <div>
-                        <div className="text-sm font-medium text-gray-900">
+                        <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
                           {s.name}
+                          {s.authType === 'oauth2' && (
+                            <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
+                              OAuth2
+                            </span>
+                          )}
                         </div>
                         <div className="text-xs text-gray-500">
                           {s.host}:{s.port}
@@ -927,14 +1046,14 @@ function MailLayoutContent({ children }: { children: React.ReactNode }) {
                   value={newServerName}
                   onChange={e => setNewServerName(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
-                  placeholder="服务器名称 (如 Gmail)"
+                  placeholder="服务器名称 (如 Outlook、Gmail)"
                 />
                 <input
                   type="text"
                   value={newServerHost}
                   onChange={e => setNewServerHost(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
-                  placeholder="主机地址 (如 imap.gmail.com)"
+                  placeholder="主机地址 (如 outlook.office365.com)"
                 />
                 <div className="flex gap-3">
                   <input
@@ -956,22 +1075,86 @@ function MailLayoutContent({ children }: { children: React.ReactNode }) {
                     <span className="text-sm text-gray-700">TLS</span>
                   </label>
                 </div>
+
+                {/* Auth Type Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    认证方式
+                  </label>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="authType"
+                        checked={newServerAuthType === 'password'}
+                        onChange={() => {
+                          setNewServerAuthType('password')
+                          setNewServerClientId('')
+                        }}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm text-gray-700">密码认证</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="authType"
+                        checked={newServerAuthType === 'oauth2'}
+                        onChange={() => setNewServerAuthType('oauth2')}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm text-gray-700">
+                        OAuth2 (Outlook)
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Client ID for OAuth2 */}
+                {newServerAuthType === 'oauth2' && (
+                  <div>
+                    <input
+                      type="text"
+                      value={newServerClientId}
+                      onChange={e => setNewServerClientId(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 text-sm"
+                      placeholder="Azure App Client ID"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      从 Azure Portal 获取的应用程序 Client ID
+                    </p>
+                  </div>
+                )}
+
                 <button
                   onClick={() => {
-                    if (newServerName && newServerHost) {
+                    const isOAuth2 = newServerAuthType === 'oauth2'
+                    if (
+                      newServerName &&
+                      newServerHost &&
+                      (!isOAuth2 || newServerClientId)
+                    ) {
                       addServer({
                         name: newServerName,
                         host: newServerHost,
                         port: newServerPort,
                         tls: newServerTls,
+                        authType: newServerAuthType,
+                        clientId: isOAuth2 ? newServerClientId : undefined,
                       })
                       setNewServerName('')
                       setNewServerHost('')
                       setNewServerPort(993)
                       setNewServerTls(true)
+                      setNewServerAuthType('password')
+                      setNewServerClientId('')
                     }
                   }}
-                  disabled={!newServerName || !newServerHost}
+                  disabled={
+                    !newServerName ||
+                    !newServerHost ||
+                    (newServerAuthType === 'oauth2' && !newServerClientId)
+                  }
                   className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   添加服务器
