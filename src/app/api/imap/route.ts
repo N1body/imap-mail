@@ -8,6 +8,7 @@ import {
   deleteEmails,
   markAsRead,
   searchEmails,
+  getAttachment,
   ImapConfig,
 } from '@/lib/imap'
 import { getAccessToken, generateXOAuth2String } from '@/lib/oauth2'
@@ -175,6 +176,35 @@ export async function POST(request: NextRequest) {
         }
         await markAsRead(imapConfig, folder, parseInt(uid))
         return NextResponse.json({ success: true })
+      }
+
+      case 'attachment': {
+        if (!folder || !uid) {
+          return NextResponse.json(
+            { error: 'Folder and UID are required' },
+            { status: 400 }
+          )
+        }
+        const { attachmentIndex } = body
+        if (typeof attachmentIndex !== 'number') {
+          return NextResponse.json(
+            { error: 'Attachment index is required' },
+            { status: 400 }
+          )
+        }
+        const attachment = await getAttachment(
+          imapConfig,
+          folder,
+          parseInt(uid),
+          attachmentIndex
+        )
+        if (!attachment) {
+          return NextResponse.json(
+            { error: 'Attachment not found' },
+            { status: 404 }
+          )
+        }
+        return NextResponse.json({ attachment })
       }
 
       default:

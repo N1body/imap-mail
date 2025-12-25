@@ -763,3 +763,84 @@ export function markAsRead(
     imap.connect()
   })
 }
+
+export interface AttachmentContent {
+  filename: string
+  contentType: string
+  size: number
+  content: string // base64 encoded
+}
+
+export function getAttachment(
+  config: ImapConfig,
+  folder: string,
+  uid: number,
+  attachmentIndex: number
+): Promise<AttachmentContent | null> {
+  return new Promise((resolve, reject) => {
+    const imap = createImapConnection(config)
+
+    imap.once('ready', () => {
+      imap.openBox(folder, true, err => {
+        if (err) {
+          imap.end()
+          return reject(err)
+        }
+
+        const fetch = imap.fetch(uid, {
+          bodies: '',
+          struct: true,
+        })
+
+        const emailContent: Buffer[] = []
+
+        fetch.on('message', msg => {
+          msg.on('body', stream => {
+            stream.on('data', (chunk: Buffer) => {
+              emailContent.push(chunk)
+            })
+          })
+        })
+
+        fetch.once('error', fetchErr => {
+          imap.end()
+          reject(fetchErr)
+        })
+
+        fetch.once('end', async () => {
+          imap.end()
+
+          if (emailContent.length === 0) {
+            return resolve(null)
+          }
+
+          try {
+            const rawEmail = Buffer.concat(emailContent)
+            const parsed: ParsedMail = await simpleParser(rawEmail)
+
+            const attachments = parsed.attachments || []
+            if (attachmentIndex < 0 || attachmentIndex >= attachments.length) {
+              return resolve(null)
+            }
+
+            const att = attachments[attachmentIndex]
+            resolve({
+              filename: att.filename || 'unknown',
+              contentType: att.contentType || 'application/octet-stream',
+              size: att.size || 0,
+              content: att.content.toString('base64'),
+            })
+          } catch (parseError) {
+            reject(parseError)
+          }
+        })
+      })
+    })
+
+    imap.once('error', (err: Error) => {
+      reject(err)
+    })
+
+    imap.connect()
+  })
+}

@@ -60,6 +60,9 @@ export default function EmailDetailPage({
   const [email, setEmail] = useState<EmailDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [downloadingAttachment, setDownloadingAttachment] = useState<
+    number | null
+  >(null)
 
   const apiCall = useCallback(
     async (action: string, params: Record<string, unknown> = {}) => {
@@ -132,6 +135,45 @@ export default function EmailDetailPage({
     if (bytes < 1024) return bytes + ' B'
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  }
+
+  const handleDownloadAttachment = async (
+    attachmentIndex: number,
+    filename: string
+  ) => {
+    try {
+      setDownloadingAttachment(attachmentIndex)
+      const data = await apiCall('attachment', { folder, uid, attachmentIndex })
+
+      if (data.attachment) {
+        // Convert base64 to blob
+        const byteCharacters = atob(data.attachment.content)
+        const byteNumbers = new Array(byteCharacters.length)
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i)
+        }
+        const byteArray = new Uint8Array(byteNumbers)
+        const blob = new Blob([byteArray], {
+          type: data.attachment.contentType,
+        })
+
+        // Create download link
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Failed to download attachment'
+      )
+    } finally {
+      setDownloadingAttachment(null)
+    }
   }
 
   if (!isDataLoaded || loading) {
@@ -439,10 +481,36 @@ export default function EmailDetailPage({
                 {email.attachments.map((att, i) => (
                   <div
                     key={i}
-                    className="group relative flex items-center gap-3 p-3 bg-[#f5f5f5] rounded-md border border-transparent hover:border-gray-300 hover:shadow-sm w-[200px] cursor-pointer transition-all overflow-hidden"
+                    onClick={() => handleDownloadAttachment(i, att.filename)}
+                    className={`group relative flex items-center gap-3 p-3 bg-[#f5f5f5] rounded-md border border-transparent hover:border-gray-300 hover:shadow-sm w-[200px] cursor-pointer transition-all overflow-hidden ${
+                      downloadingAttachment === i ? 'opacity-50' : ''
+                    }`}
                   >
                     <div className="w-10 h-10 bg-red-100 rounded flex items-center justify-center text-xs font-bold text-red-600 flex-shrink-0">
-                      {att.filename.split('.').pop()?.toUpperCase() || 'FILE'}
+                      {downloadingAttachment === i ? (
+                        <svg
+                          className="animate-spin h-5 w-5 text-red-600"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          ></circle>
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          ></path>
+                        </svg>
+                      ) : (
+                        att.filename.split('.').pop()?.toUpperCase() || 'FILE'
+                      )}
                     </div>
                     <div className="flex-1 min-w-0 overflow-hidden">
                       <div
@@ -454,6 +522,22 @@ export default function EmailDetailPage({
                       <div className="text-xs text-gray-500">
                         {formatFileSize(att.size)}
                       </div>
+                    </div>
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-5 w-5 text-gray-500"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                        />
+                      </svg>
                     </div>
                   </div>
                 ))}
